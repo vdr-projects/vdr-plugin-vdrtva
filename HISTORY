@@ -1,0 +1,24 @@
+2008/2/2 - Version 0.0.1 (vdr version 1.5.13)
+
+- Initial preview.
+
+2008/3/30 - Version 0.0.2 (vdr version 1.6.0)
+
+- sdt.c - minor code tidy.
+- eit.c - don't populate CRIDs if DefaultAuthority hasn't been set yet.
+	- change tags in epg.data to match vdr standard.
+	- check CRID is not indirectly referenced via a CIT.
+- vdr.5 - document changes made to files.
+
+2008/9/30 - Version 0.0.3 (vdr version 1.6.0-2)
+
+- Patch against latest VDR version
+- Sample Perl program included to implement Series Link.
+- Freeview Playback is now Freeview Plus.
+
+2008/12/01 - Version 0.0.4 (vdr version 1.6.0-2)
+- eit.c     - fixed memory leak (thanks Dominic Morris).
+- series.pl - links file could be corrupted if a new timer was manually added to a series. Timer clash detection added. General clean-up.
+
+2009/8/23 - Version 0.0.5 (vdr versions 1.6.0-2 and 1.7.9)
+- New patch for development version of vdr.

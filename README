@@ -1,0 +1,33 @@
+TV-Anytime is the name given to a set of technologies which aim to simplify the
+process of recording and replaying broadcast content. The standards are published
+by ETSI and are available without cost from www.etsi.org (registration required).
+
+In the UK a subset of the TV-Anytime specification is broadcast on the DTV service 
+under the trade name "FreeView Plus". This patch is written for the UK version but
+should work with the full specification.
+
+TV-Anytime data is contained in Content Reference Identifiers (CRIDs). The syntax 
+of a CRID is described in RFC 4078; it is a URI-compliant string of the form:
+
+	crid://<DNS name>/<data>
+
+in which <DNS name> is a registered internet domain name (RFC 1034) and <data> is
+a free-format string. The <DNS Name> section relates to the content provider (TV 
+channel or company), and the <data> section to the programme.
+
+CRIDs are transmitted in the EIT as Content Identifier Descriptors, with descriptor 
+ID 0x76. To save bandwith only the <data> section is sent, the <DNS Name> part is 
+taken from the Default Authority Descriptor in the SDT, and the crid:// is assumed.
+
+A programme may have up to two CRIDs in its EPG entry. One identifies the specific 
+item of content which is being broadcast, while the other identifies a series of
+programmes which this item belongs to. In FreeView Plus these CRIDs have crid_type
+values 0x31 and 0x32 respectively (TV-Anytime uses values 0x01 and 0x02).
+
+To give an example, the programme "Torchwood" broadcast on channel BBC2 at 21:00 on 
+2008-01-16 had item CRID '54BXLC' and series CRID 'KCJ00C'. When the same programme
+was repeated the following day on channel BBC3, the item CRID remained the same but
+the series CRID was 'KCJ12C'. Meanwhile the episode broadcast on BBC2 one week 
+later on 2008-01-24 had CRID '54BXLD' but the same series as the previous week. Hence it is possible for a PVR to record an entire series by using the series CRID, or to find an alternative broadcast for an individual item if there is a clash with 
+another recording.
+

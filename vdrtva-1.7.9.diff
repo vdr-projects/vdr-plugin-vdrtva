@@ -1,0 +1,455 @@
+diff -ur vdr-1.7.9/channels.c vdr-1.7/channels.c
+--- vdr-1.7.9/channels.c	2009-08-16 16:08:49.000000000 +0100
++++ vdr-1.7/channels.c	2009-08-23 15:15:16.000000000 +0100
+@@ -188,6 +188,7 @@
+   shortName = strdup("");
+   provider = strdup("");
+   portalName = strdup("");
++  defaultAuthority = strdup("");
+   memset(&__BeginData__, 0, (char *)&__EndData__ - (char *)&__BeginData__);
+   inversion    = INVERSION_AUTO;
+   bandwidth    = 8000000;
+@@ -211,6 +212,7 @@
+   shortName = NULL;
+   provider = NULL;
+   portalName = NULL;
++  defaultAuthority = NULL;
+   schedule     = NULL;
+   linkChannels = NULL;
+   refChannel   = NULL;
+@@ -239,6 +241,7 @@
+   free(shortName);
+   free(provider);
+   free(portalName);
++  free(defaultAuthority);
+ }
+ 
+ cChannel& cChannel::operator= (const cChannel &Channel)
+@@ -247,6 +250,7 @@
+   shortName = strcpyrealloc(shortName, Channel.shortName);
+   provider = strcpyrealloc(provider, Channel.provider);
+   portalName = strcpyrealloc(portalName, Channel.portalName);
++  defaultAuthority = strcpyrealloc(defaultAuthority, Channel.defaultAuthority);
+   memcpy(&__BeginData__, &Channel.__BeginData__, (char *)&Channel.__EndData__ - (char *)&Channel.__BeginData__);
+   return *this;
+ }
+@@ -438,6 +442,13 @@
+      }
+ }
+ 
++void cChannel::SetDefaultAuthority(const char *DefaultAuthority)
++{
++  if (!isempty(DefaultAuthority) && strcmp(defaultAuthority, DefaultAuthority) != 0) {
++     defaultAuthority = strcpyrealloc(defaultAuthority, DefaultAuthority);
++     }
++}
++
+ #define STRDIFF 0x01
+ #define VALDIFF 0x02
+ 
+@@ -752,11 +763,11 @@
+         q += IntArrayToString(q, Channel->dpids, 10, Channel->dlangs);
+         }
+      *q = 0;
+-     char caidbuf[MAXCAIDS * 5 + 10]; // 5: 4 digits plus delimiting ',', 10: paranoia
++     char caidbuf[MAXCAIDS * 5 + 10 + 256]; // 5: 4 digits plus delimiting ',', 10 + max DNS domain length: paranoia
+      q = caidbuf;
+      q += IntArrayToString(q, Channel->caids, 16);
+      *q = 0;
+-     buffer = cString::sprintf("%s:%d:%s:%s:%d:%s:%s:%d:%s:%d:%d:%d:%d\n", FullName, Channel->frequency, *Channel->ParametersToString(), *cSource::ToString(Channel->source), Channel->srate, vpidbuf, apidbuf, Channel->tpid, caidbuf, Channel->sid, Channel->nid, Channel->tid, Channel->rid);
++     buffer = cString::sprintf("%s:%d:%s:%s:%d:%s:%s:%d:%s:%d:%d:%d:%d:%s\n", FullName, Channel->frequency, *Channel->ParametersToString(), *cSource::ToString(Channel->source), Channel->srate, vpidbuf, apidbuf, Channel->tpid, caidbuf, Channel->sid, Channel->nid, Channel->tid, Channel->rid, Channel->defaultAuthority);
+      }
+   return buffer;
+ }
+@@ -791,13 +802,16 @@
+      char *vpidbuf = NULL;
+      char *apidbuf = NULL;
+      char *caidbuf = NULL;
+-     int fields = sscanf(s, "%a[^:]:%d :%a[^:]:%a[^:] :%d :%a[^:]:%a[^:]:%d :%a[^:]:%d :%d :%d :%d ", &namebuf, &frequency, &parambuf, &sourcebuf, &srate, &vpidbuf, &apidbuf, &tpid, &caidbuf, &sid, &nid, &tid, &rid);
++     char *dabuf = NULL;
++     int fields = sscanf(s, "%a[^:]:%d :%a[^:]:%a[^:] :%d :%a[^:]:%a[^:]:%d :%a[^:]:%d :%d :%d :%d :%a[^:]", &namebuf, &frequency, &parambuf, &sourcebuf, &srate, &vpidbuf, &apidbuf, &tpid, &caidbuf, &sid, &nid, &tid, &rid, &dabuf);
+      if (fields >= 9) {
+         if (fields == 9) {
+            // allow reading of old format
+            sid = atoi(caidbuf);
+            delete caidbuf;
+            caidbuf = NULL;
++           delete dabuf;
++           dabuf = NULL;
+            caids[0] = tpid;
+            caids[1] = 0;
+            tpid = 0;
+@@ -904,12 +918,17 @@
+            }
+         name = strcpyrealloc(name, namebuf);
+ 
++        if (dabuf) {
++          defaultAuthority = strcpyrealloc(defaultAuthority, dabuf);
++        }
++
+         free(parambuf);
+         free(sourcebuf);
+         free(vpidbuf);
+         free(apidbuf);
+         free(caidbuf);
+         free(namebuf);
++        free(dabuf);
+         if (!GetChannelID().Valid()) {
+            esyslog("ERROR: channel data results in invalid ID!");
+            return false;
+diff -ur vdr-1.7.9/channels.h vdr-1.7/channels.h
+--- vdr-1.7.9/channels.h	2009-08-16 15:58:26.000000000 +0100
++++ vdr-1.7/channels.h	2009-08-23 15:15:16.000000000 +0100
+@@ -116,6 +116,7 @@
+   char *shortName;
+   char *provider;
+   char *portalName;
++  char *defaultAuthority;
+   int __BeginData__;
+   int frequency; // MHz
+   int source;
+@@ -171,6 +172,7 @@
+   const char *ShortName(bool OrName = false) const { return (OrName && isempty(shortName)) ? name : shortName; }
+   const char *Provider(void) const { return provider; }
+   const char *PortalName(void) const { return portalName; }
++  const char *DefaultAuthority(void) const { return defaultAuthority; }
+   int Frequency(void) const { return frequency; } ///< Returns the actual frequency, as given in 'channels.conf'
+   int Transponder(void) const;                    ///< Returns the transponder frequency in MHz, plus the polarization in case of sat
+   static int Transponder(int Frequency, char Polarization); ///< builds the transponder from the given Frequency and Polarization
+@@ -227,6 +229,7 @@
+   void SetId(int Nid, int Tid, int Sid, int Rid = 0);
+   void SetName(const char *Name, const char *ShortName, const char *Provider);
+   void SetPortalName(const char *PortalName);
++  void SetDefaultAuthority(const char *DefaultAuthority);
+   void SetPids(int Vpid, int Ppid, int Vtype, int *Apids, char ALangs[][MAXLANGCODE2], int *Dpids, char DLangs[][MAXLANGCODE2], int *Spids, char SLangs[][MAXLANGCODE2], int Tpid);
+   void SetCaIds(const int *CaIds); // list must be zero-terminated
+   void SetCaDescriptors(int Level);
+diff -ur vdr-1.7.9/eit.c vdr-1.7/eit.c
+--- vdr-1.7.9/eit.c	2009-06-21 14:46:20.000000000 +0100
++++ vdr-1.7/eit.c	2009-08-23 15:15:16.000000000 +0100
+@@ -121,6 +121,8 @@
+       SI::Descriptor *d;
+       SI::ExtendedEventDescriptors *ExtendedEventDescriptors = NULL;
+       SI::ShortEventDescriptor *ShortEventDescriptor = NULL;
++      SI::ContentIdentifierDescriptor *itemCrid = NULL;
++      SI::ContentIdentifierDescriptor *seriesCrid = NULL;
+       cLinkChannels *LinkChannels = NULL;
+       cComponents *Components = NULL;
+       for (SI::Loop::Iterator it2; (d = SiEitEvent.eventDescriptors.getNext(it2)); ) {
+@@ -234,6 +236,23 @@
+                     }
+                  }
+                  break;
++            case SI::ContentIdentifierDescriptorTag: {
++                 SI::ContentIdentifierDescriptor *cd = (SI::ContentIdentifierDescriptor *)d;
++                 switch (cd->getCridType()) {
++                   case 0x01:
++                   case 0x31: {
++                        itemCrid = cd;
++                        d = NULL; // so that it is not deleted
++                        break;
++                   }
++                   case 0x02:
++                   case 0x32: {
++                        seriesCrid = cd;
++                        d = NULL; // so that it is not deleted
++                        break;
++                   }
++                 }
++            }
+             default: ;
+             }
+           delete d;
+@@ -255,9 +274,23 @@
+             }
+          else if (!HasExternalData)
+             pEvent->SetDescription(NULL);
++         if (itemCrid && (itemCrid->getCridLocation() == 0)) {
++            char buffer[Utf8BufSize(256)];
++            strcpy (buffer, channel->DefaultAuthority());
++            strcat(buffer, itemCrid->entry.getText());
++            pEvent->SetItemCRID(buffer);
+          }
++         if (seriesCrid && (seriesCrid->getCridLocation() == 0)) {
++            char buffer[Utf8BufSize(256)];
++            strcpy (buffer, channel->DefaultAuthority());
++            strcat(buffer, seriesCrid->entry.getText());
++            pEvent->SetSeriesCRID(buffer);
++         }
++      }
+       delete ExtendedEventDescriptors;
+       delete ShortEventDescriptor;
++      delete itemCrid;
++      delete seriesCrid;
+ 
+       pEvent->SetComponents(Components);
+ 
+diff -ur vdr-1.7.9/epg.c vdr-1.7/epg.c
+--- vdr-1.7.9/epg.c	2008-05-01 15:53:55.000000000 +0100
++++ vdr-1.7/epg.c	2009-06-06 09:48:00.000000000 +0100
+@@ -115,6 +115,8 @@
+   startTime = 0;
+   duration = 0;
+   vps = 0;
++  itemCRID = NULL;
++  seriesCRID = NULL;
+   SetSeen();
+ }
+ 
+@@ -123,6 +125,8 @@
+   free(title);
+   free(shortText);
+   free(description);
++  free(itemCRID);
++  free(seriesCRID);
+   delete components;
+ }
+ 
+@@ -207,6 +211,16 @@
+   vps = Vps;
+ }
+ 
++void cEvent::SetItemCRID(const char *CRID)
++{
++  itemCRID = strcpyrealloc(itemCRID, CRID);
++}
++
++void cEvent::SetSeriesCRID(const char *CRID)
++{
++  seriesCRID = strcpyrealloc(seriesCRID, CRID);
++}
++
+ void cEvent::SetSeen(void)
+ {
+   seen = time(NULL);
+@@ -280,6 +294,10 @@
+         }
+      if (vps)
+         fprintf(f, "%sV %ld\n", Prefix, vps);
++     if (!isempty(itemCRID))
++        fprintf(f, "%sI %s\n", Prefix, itemCRID);
++     if (!isempty(seriesCRID))
++        fprintf(f, "%sR %s\n", Prefix, seriesCRID);
+      if (!InfoOnly)
+         fprintf(f, "%se\n", Prefix);
+      }
+@@ -302,6 +320,10 @@
+               break;
+     case 'V': SetVps(atoi(t));
+               break;
++    case 'I': SetItemCRID(t);
++              break;
++    case 'R': SetSeriesCRID(t);
++              break;
+     default:  esyslog("ERROR: unexpected tag while reading EPG data: %s", s);
+               return false;
+     }
+diff -ur vdr-1.7.9/epg.h vdr-1.7/epg.h
+--- vdr-1.7.9/epg.h	2006-10-07 14:47:19.000000000 +0100
++++ vdr-1.7/epg.h	2009-06-06 09:48:00.000000000 +0100
+@@ -66,6 +66,8 @@
+   int duration;            // Duration of this event in seconds
+   time_t vps;              // Video Programming Service timestamp (VPS, aka "Programme Identification Label", PIL)
+   time_t seen;             // When this event was last seen in the data stream
++  char *itemCRID;          // Item CRID
++  char *seriesCRID;        // Series CRID
+ public:
+   cEvent(tEventID EventID);
+   ~cEvent();
+@@ -84,6 +86,8 @@
+   time_t EndTime(void) const { return startTime + duration; }
+   int Duration(void) const { return duration; }
+   time_t Vps(void) const { return vps; }
++  const char *ItemCRID(void) const { return itemCRID; }
++  const char *SeriesCRID(void) const { return seriesCRID; }
+   time_t Seen(void) const { return seen; }
+   bool SeenWithin(int Seconds) const { return time(NULL) - seen < Seconds; }
+   bool HasTimer(void) const;
+@@ -103,6 +107,8 @@
+   void SetStartTime(time_t StartTime);
+   void SetDuration(int Duration);
+   void SetVps(time_t Vps);
++  void SetItemCRID(const char *CRID);
++  void SetSeriesCRID(const char *CRID);
+   void SetSeen(void);
+   cString ToDescr(void) const;
+   void Dump(FILE *f, const char *Prefix = "", bool InfoOnly = false) const;
+diff -ur vdr-1.7.9/libsi/descriptor.c vdr-1.7/libsi/descriptor.c
+--- vdr-1.7.9/libsi/descriptor.c	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/descriptor.c	2009-06-06 09:48:00.000000000 +0100
+@@ -643,6 +643,29 @@
+    textualServiceIdentifier.setData(data+sizeof(descr_service_identifier), getLength()-sizeof(descr_service_identifier));
+ }
+ 
++void ContentIdentifierDescriptor::Parse() {
++   int offset=0;
++   data.setPointerAndOffset<const descr_content_identifier>(s, offset);
++   if (s->crid_location == 0) {
++     entry.setData(data+(offset-1), s->crid_length);
++   }
++   else {
++      entry.setData(data+(offset-1), 2);
++   }
++}
++
++int ContentIdentifierDescriptor::getCridType() const {
++   return s->crid_type;
++}
++
++int ContentIdentifierDescriptor::getCridLocation() const {
++   return s->crid_location;
++}
++
++void DefaultAuthorityDescriptor::Parse() {
++   DefaultAuthority.setData(data+sizeof(descr_default_authority), getLength()-sizeof(descr_default_authority));
++}
++
+ void MultilingualNameDescriptor::Parse() {
+    nameLoop.setData(data+sizeof(descr_multilingual_network_name), getLength()-sizeof(descr_multilingual_network_name));
+ }
+diff -ur vdr-1.7.9/libsi/descriptor.h vdr-1.7/libsi/descriptor.h
+--- vdr-1.7.9/libsi/descriptor.h	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/descriptor.h	2009-06-06 09:48:00.000000000 +0100
+@@ -361,6 +361,25 @@
+    virtual void Parse();
+ };
+ 
++class ContentIdentifierDescriptor : public Descriptor {
++public:
++  String entry;
++  int getCridType() const;
++  int getCridLocation() const;
++//  virtual int getLength() { return sizeof(descr_content_identifier)+entry.getLength(); }
++   private:
++      const descr_content_identifier *s;
++protected:
++  virtual void Parse();
++};
++
++class DefaultAuthorityDescriptor : public Descriptor {
++public:
++   String DefaultAuthority; //ID
++protected:
++   virtual void Parse();
++};
++
+ //abstract base class
+ class MultilingualNameDescriptor : public Descriptor {
+ public:
+diff -ur vdr-1.7.9/libsi/headers.h vdr-1.7/libsi/headers.h
+--- vdr-1.7.9/libsi/headers.h	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/headers.h	2009-06-06 09:48:00.000000000 +0100
+@@ -1673,11 +1673,39 @@
+    u_char descriptor_length                      :8;
+ };
+ 
++struct entry_tva_id {
++   u_char tva_id_hi                              :8;
++   u_char tva_id_lo                              :8;
++#if BYTE_ORDER == BIG_ENDIAN
++   u_char reserved                               :5;
++   u_char running_status                         :3;
++#else
++   u_char running_status                         :3;
++   u_char reserved                               :5;
++#endif
++};
++
++
+ /* 0x76 content_identifier_descriptor (ETSI TS 102 323) */
+ 
+ struct descr_content_identifier {
+    u_char descriptor_tag                         :8;
+    u_char descriptor_length                      :8;
++#if BYTE_ORDER == BIG_ENDIAN
++   u_char crid_type                              :6;
++   u_char crid_location                          :2;
++#else
++   u_char crid_location                          :2;
++   u_char crid_type                              :6;
++#endif
++  union {
++    u_char crid_length                           :8;
++    u_char crid_ref_hi                           :8;
++  };
++  union {
++    u_char crid_byte                             :8;
++    u_char crid_ref_lo                           :8;
++  };
+ };
+ 
+ /* 0x77 time_slice_fec_identifier_descriptor (ETSI EN 301 192) */
+diff -ur vdr-1.7.9/libsi/si.c vdr-1.7/libsi/si.c
+--- vdr-1.7.9/libsi/si.c	2008-03-05 17:00:55.000000000 +0000
++++ vdr-1.7/libsi/si.c	2009-06-06 09:48:00.000000000 +0100
+@@ -605,6 +605,12 @@
+          case ExtensionDescriptorTag:
+             d=new ExtensionDescriptor();
+             break;
++         case ContentIdentifierDescriptorTag:
++            d=new ContentIdentifierDescriptor();
++            break;
++         case DefaultAuthorityDescriptorTag:
++            d=new DefaultAuthorityDescriptor();
++            break;
+ 
+          //note that it is no problem to implement one
+          //of the unimplemented descriptors.
+@@ -647,10 +653,8 @@
+          case TransportStreamDescriptorTag:
+ 
+          //defined in ETSI EN 300 468 v 1.7.1
+-         case DefaultAuthorityDescriptorTag:
+          case RelatedContentDescriptorTag:
+          case TVAIdDescriptorTag:
+-         case ContentIdentifierDescriptorTag:
+          case TimeSliceFecIdentifierDescriptorTag:
+          case ECMRepetitionRateDescriptorTag:
+          case EnhancedAC3DescriptorTag:
+diff -ur vdr-1.7.9/sdt.c vdr-1.7/sdt.c
+--- vdr-1.7.9/sdt.c	2008-04-12 14:33:55.000000000 +0100
++++ vdr-1.7/sdt.c	2009-06-06 09:48:00.000000000 +0100
+@@ -124,6 +124,12 @@
+                      }
+                  }
+                  break;
++            case SI::DefaultAuthorityDescriptorTag: {
++                 SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
++                   char DaBuf[Utf8BufSize(1024)];
++                   da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
++                   channel->SetDefaultAuthority(DaBuf);
++              }
+             default: ;
+             }
+           delete d;
+diff -ur vdr-1.7.9/vdr.5 vdr-1.7/vdr.5
+--- vdr-1.7.9/vdr.5	2009-01-06 12:37:35.000000000 +0000
++++ vdr-1.7/vdr.5	2009-06-06 09:48:00.000000000 +0100
+@@ -186,6 +186,9 @@
+ .B RID
+ The Radio ID of this channel (typically 0, may be used to distinguish channels where
+ NID, TID and SID are all equal).
++.TP
++.B Default Authority
++The Default Authority for CRIDs on this channel (TVAnytime).
+ .PP
+ A particular channel can be uniquely identified by its \fBchannel\ ID\fR,
+ which is a string that looks like this:
+@@ -643,6 +646,8 @@
+ \fBD\fR@<description>
+ \fBX\fR@<stream> <type> <language> <descr>
+ \fBV\fR@<vps time>
++\fBI\fR@<item CRID>
++\fBR\fR@<series CRID>
+ \fBe\fR@
+ \fBc\fR@
+ .TE
+@@ -674,6 +679,8 @@
+ <language>     @is the three letter language code (optionally two codes, separated by '+')
+ <descr>        @is the description of this stream component
+ <vps time>     @is the Video Programming Service time of this event
++<item CRID>    @is the CRID of this event (TVAnytime)
++<series CRID>  @is the CRID of the series which this event is part of (TVAnytime)
+ .TE
+ 
+ This file will be read at program startup in order to restore the results of
