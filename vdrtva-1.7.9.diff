@@ -1,6 +1,6 @@
-diff -ur vdr-1.7.10/channels.c vdr-1.7/channels.c
---- vdr-1.7.10/channels.c	2009-08-30 12:25:50.000000000 +0100
-+++ vdr-1.7/channels.c	2009-11-22 16:12:06.000000000 +0000
+diff -ur vdr-1.7.9/channels.c vdr-1.7/channels.c
+--- vdr-1.7.9/channels.c	2009-08-16 16:08:49.000000000 +0100
++++ vdr-1.7/channels.c	2009-08-23 15:15:16.000000000 +0100
 @@ -188,6 +188,7 @@
    shortName = strdup("");
    provider = strdup("");
@@ -47,7 +47,7 @@ diff -ur vdr-1.7.10/channels.c vdr-1.7/channels.c
  #define STRDIFF 0x01
  #define VALDIFF 0x02
  
-@@ -755,11 +766,11 @@
+@@ -752,11 +763,11 @@
          q += IntArrayToString(q, Channel->dpids, 10, Channel->dlangs);
          }
       *q = 0;
@@ -61,7 +61,7 @@ diff -ur vdr-1.7.10/channels.c vdr-1.7/channels.c
       }
    return buffer;
  }
-@@ -794,13 +805,16 @@
+@@ -791,13 +802,16 @@
       char *vpidbuf = NULL;
       char *apidbuf = NULL;
       char *caidbuf = NULL;
@@ -79,7 +79,7 @@ diff -ur vdr-1.7.10/channels.c vdr-1.7/channels.c
             caids[0] = tpid;
             caids[1] = 0;
             tpid = 0;
-@@ -907,12 +921,17 @@
+@@ -904,12 +918,17 @@
             }
          name = strcpyrealloc(name, namebuf);
  
@@ -97,9 +97,9 @@ diff -ur vdr-1.7.10/channels.c vdr-1.7/channels.c
          if (!GetChannelID().Valid()) {
             esyslog("ERROR: channel data results in invalid ID!");
             return false;
-diff -ur vdr-1.7.10/channels.h vdr-1.7/channels.h
---- vdr-1.7.10/channels.h	2009-08-30 12:05:54.000000000 +0100
-+++ vdr-1.7/channels.h	2009-11-22 16:12:06.000000000 +0000
+diff -ur vdr-1.7.9/channels.h vdr-1.7/channels.h
+--- vdr-1.7.9/channels.h	2009-08-16 15:58:26.000000000 +0100
++++ vdr-1.7/channels.h	2009-08-23 15:15:16.000000000 +0100
 @@ -116,6 +116,7 @@
    char *shortName;
    char *provider;
@@ -124,8 +124,8 @@ diff -ur vdr-1.7.10/channels.h vdr-1.7/channels.h
    void SetPids(int Vpid, int Ppid, int Vtype, int *Apids, char ALangs[][MAXLANGCODE2], int *Dpids, char DLangs[][MAXLANGCODE2], int *Spids, char SLangs[][MAXLANGCODE2], int Tpid);
    void SetCaIds(const int *CaIds); // list must be zero-terminated
    void SetCaDescriptors(int Level);
-diff -ur vdr-1.7.10/eit.c vdr-1.7/eit.c
---- vdr-1.7.10/eit.c	2009-06-21 14:46:20.000000000 +0100
+diff -ur vdr-1.7.9/eit.c vdr-1.7/eit.c
+--- vdr-1.7.9/eit.c	2009-06-21 14:46:20.000000000 +0100
 +++ vdr-1.7/eit.c	2009-08-23 15:15:16.000000000 +0100
 @@ -121,6 +121,8 @@
        SI::Descriptor *d;
@@ -184,9 +184,9 @@ diff -ur vdr-1.7.10/eit.c vdr-1.7/eit.c
  
        pEvent->SetComponents(Components);
  
-diff -ur vdr-1.7.10/epg.c vdr-1.7/epg.c
---- vdr-1.7.10/epg.c	2008-05-01 15:53:55.000000000 +0100
-+++ vdr-1.7/epg.c	2009-11-03 18:06:11.000000000 +0000
+diff -ur vdr-1.7.9/epg.c vdr-1.7/epg.c
+--- vdr-1.7.9/epg.c	2008-05-01 15:53:55.000000000 +0100
++++ vdr-1.7/epg.c	2009-06-06 09:48:00.000000000 +0100
 @@ -115,6 +115,8 @@
    startTime = 0;
    duration = 0;
@@ -244,8 +244,8 @@ diff -ur vdr-1.7.10/epg.c vdr-1.7/epg.c
      default:  esyslog("ERROR: unexpected tag while reading EPG data: %s", s);
                return false;
      }
-diff -ur vdr-1.7.10/epg.h vdr-1.7/epg.h
---- vdr-1.7.10/epg.h	2006-10-07 14:47:19.000000000 +0100
+diff -ur vdr-1.7.9/epg.h vdr-1.7/epg.h
+--- vdr-1.7.9/epg.h	2006-10-07 14:47:19.000000000 +0100
 +++ vdr-1.7/epg.h	2009-06-06 09:48:00.000000000 +0100
 @@ -66,6 +66,8 @@
    int duration;            // Duration of this event in seconds
@@ -274,8 +274,8 @@ diff -ur vdr-1.7.10/epg.h vdr-1.7/epg.h
    void SetSeen(void);
    cString ToDescr(void) const;
    void Dump(FILE *f, const char *Prefix = "", bool InfoOnly = false) const;
-diff -ur vdr-1.7.10/libsi/descriptor.c vdr-1.7/libsi/descriptor.c
---- vdr-1.7.10/libsi/descriptor.c	2007-02-03 11:45:58.000000000 +0000
+diff -ur vdr-1.7.9/libsi/descriptor.c vdr-1.7/libsi/descriptor.c
+--- vdr-1.7.9/libsi/descriptor.c	2007-02-03 11:45:58.000000000 +0000
 +++ vdr-1.7/libsi/descriptor.c	2009-06-06 09:48:00.000000000 +0100
 @@ -643,6 +643,29 @@
     textualServiceIdentifier.setData(data+sizeof(descr_service_identifier), getLength()-sizeof(descr_service_identifier));
@@ -307,8 +307,8 @@ diff -ur vdr-1.7.10/libsi/descriptor.c vdr-1.7/libsi/descriptor.c
  void MultilingualNameDescriptor::Parse() {
     nameLoop.setData(data+sizeof(descr_multilingual_network_name), getLength()-sizeof(descr_multilingual_network_name));
  }
-diff -ur vdr-1.7.10/libsi/descriptor.h vdr-1.7/libsi/descriptor.h
---- vdr-1.7.10/libsi/descriptor.h	2007-02-03 11:45:58.000000000 +0000
+diff -ur vdr-1.7.9/libsi/descriptor.h vdr-1.7/libsi/descriptor.h
+--- vdr-1.7.9/libsi/descriptor.h	2007-02-03 11:45:58.000000000 +0000
 +++ vdr-1.7/libsi/descriptor.h	2009-06-06 09:48:00.000000000 +0100
 @@ -361,6 +361,25 @@
     virtual void Parse();
@@ -336,8 +336,8 @@ diff -ur vdr-1.7.10/libsi/descriptor.h vdr-1.7/libsi/descriptor.h
  //abstract base class
  class MultilingualNameDescriptor : public Descriptor {
  public:
-diff -ur vdr-1.7.10/libsi/headers.h vdr-1.7/libsi/headers.h
---- vdr-1.7.10/libsi/headers.h	2007-02-03 11:45:58.000000000 +0000
+diff -ur vdr-1.7.9/libsi/headers.h vdr-1.7/libsi/headers.h
+--- vdr-1.7.9/libsi/headers.h	2007-02-03 11:45:58.000000000 +0000
 +++ vdr-1.7/libsi/headers.h	2009-06-06 09:48:00.000000000 +0100
 @@ -1673,11 +1673,39 @@
     u_char descriptor_length                      :8;
@@ -379,8 +379,8 @@ diff -ur vdr-1.7.10/libsi/headers.h vdr-1.7/libsi/headers.h
  };
  
  /* 0x77 time_slice_fec_identifier_descriptor (ETSI EN 301 192) */
-diff -ur vdr-1.7.10/libsi/si.c vdr-1.7/libsi/si.c
---- vdr-1.7.10/libsi/si.c	2008-03-05 17:00:55.000000000 +0000
+diff -ur vdr-1.7.9/libsi/si.c vdr-1.7/libsi/si.c
+--- vdr-1.7.9/libsi/si.c	2008-03-05 17:00:55.000000000 +0000
 +++ vdr-1.7/libsi/si.c	2009-06-06 09:48:00.000000000 +0100
 @@ -605,6 +605,12 @@
           case ExtensionDescriptorTag:
@@ -406,8 +406,8 @@ diff -ur vdr-1.7.10/libsi/si.c vdr-1.7/libsi/si.c
           case TimeSliceFecIdentifierDescriptorTag:
           case ECMRepetitionRateDescriptorTag:
           case EnhancedAC3DescriptorTag:
-diff -ur vdr-1.7.10/sdt.c vdr-1.7/sdt.c
---- vdr-1.7.10/sdt.c	2008-04-12 14:33:55.000000000 +0100
+diff -ur vdr-1.7.9/sdt.c vdr-1.7/sdt.c
+--- vdr-1.7.9/sdt.c	2008-04-12 14:33:55.000000000 +0100
 +++ vdr-1.7/sdt.c	2009-06-06 09:48:00.000000000 +0100
 @@ -124,6 +124,12 @@
                       }
@@ -422,21 +422,9 @@ diff -ur vdr-1.7.10/sdt.c vdr-1.7/sdt.c
              default: ;
              }
            delete d;
-diff -ur vdr-1.7.10/timers.c vdr-1.7/timers.c
---- vdr-1.7.10/timers.c	2009-08-09 13:43:20.000000000 +0100
-+++ vdr-1.7/timers.c	2009-11-01 13:54:46.000000000 +0000
-@@ -423,7 +423,7 @@
-      }
- 
-   if (HasFlags(tfActive)) {
--     if (HasFlags(tfVps) && event && event->Vps()) {
-+     if (HasFlags(tfVps) && event) {
-         if (Margin || !Directly) {
-            startTime = event->StartTime();
-            stopTime = event->EndTime();
-diff -ur vdr-1.7.10/vdr.5 vdr-1.7/vdr.5
---- vdr-1.7.10/vdr.5	2009-10-18 15:09:07.000000000 +0100
-+++ vdr-1.7/vdr.5	2009-11-22 16:12:06.000000000 +0000
+diff -ur vdr-1.7.9/vdr.5 vdr-1.7/vdr.5
+--- vdr-1.7.9/vdr.5	2009-01-06 12:37:35.000000000 +0000
++++ vdr-1.7/vdr.5	2009-06-06 09:48:00.000000000 +0100
 @@ -186,6 +186,9 @@
  .B RID
  The Radio ID of this channel (typically 0, may be used to distinguish channels where

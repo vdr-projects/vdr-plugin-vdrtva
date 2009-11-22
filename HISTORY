@@ -22,8 +22,3 @@
 
 2009/8/23 - Version 0.0.5 (vdr versions 1.6.0-2 and 1.7.9)
 - New patch for development version of vdr.
-
-2009/11/22 - Version 0.0.6 (vdr versions 1.6.0-2 and 1.7.10)
-- timer.c   - Apply an old VPS patch by Anssi Hannula to use Running Status for VPS.
-- series.pl - Auto-created timers use Running Status to set start/stop times.
-- README-vps  New file.

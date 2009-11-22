@@ -1,10 +1,10 @@
 TV-Anytime is the name given to a set of technologies which aim to simplify the
 process of recording and replaying broadcast content. The standards are published
-by ETSI and are available without cost from www.etsi.org (registration required). The main standard is ETSI TS 102 323.
+by ETSI and are available without cost from www.etsi.org (registration required).
 
 In the UK a subset of the TV-Anytime specification is broadcast on the DTV service 
 under the trade name "FreeView Plus". This patch is written for the UK version but
-should work with the full specification (untested).
+should work with the full specification.
 
 TV-Anytime data is contained in Content Reference Identifiers (CRIDs). The syntax 
 of a CRID is described in RFC 4078; it is a URI-compliant string of the form:
@@ -30,3 +30,4 @@ was repeated the following day on channel BBC3, the item CRID remained the same 
 the series CRID was 'KCJ12C'. Meanwhile the episode broadcast on BBC2 one week 
 later on 2008-01-24 had CRID '54BXLD' but the same series as the previous week. Hence it is possible for a PVR to record an entire series by using the series CRID, or to find an alternative broadcast for an individual item if there is a clash with 
 another recording.
+
