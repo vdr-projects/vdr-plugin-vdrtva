@@ -1,0 +1,16 @@
+One of the important features of a video recorder is the ability to deal with programme schedule changes and to ensure that the wanted programme is always recorded. TVAnytime has its own set of data descriptors to handle late-running or cancelled programmes but these are not used by Freeview Plus. Instead the Running Status from the now/next section of the EIT is used to start and stop the recording.
+
+VDR can control timers from the running status by using 'VPS' functions in conjunction with this patch. Note however that the normal VPS operation will no longer work.
+
+To use VPS for accurate recording, some conditions must be met:
+
+- Parameter 'UseVps' in VDR's setup.conf must be set to 1
+- Timers must have the 'use VPS' flag set in timers.conf
+- The start time of a timer must be set to exactly the scheduled start time of the programme (ie no padding).
+
+With these conditions met, the sequence of events is:
+
+- Shortly before the scheduled time of the recording (set by 'VpsMargin' in VDR's setup.conf) VDR switches to the multiplex containing the channel to be recorded
+- VDR monitors the running status of the programme to be recorded
+- When the running status changes to 'running', VDR starts recording
+- When the running status changes to 'not running', VDR stops recording and deletes the timer.

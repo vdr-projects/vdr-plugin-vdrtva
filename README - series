@@ -3,11 +3,13 @@ This is a very simple script to demonstrate the 'series link' concept. Run it ev
 Configuration parameters at the start of the file must be set to match your vdr
 settings. The 'padding' values must match those used when you manually set timers (eg when using vdradmin).
 
+If you set the 'VPS' config parameter to '1', and also set 'UseVps = 1' in VDR's setup.conf, new timers will be created to use the EIT Running Status to set start and end times. An accurate Running Status is a requirement of the Freeview Plus specification.
+
 The script creates a file "links.data" in the vdr directory when run. This file contains series CRIDs of all of the timers which have been set, and the item CRIDs of the individual programmes which have had recordings scheduled. A timestamp against each entry gives the date of the last timer set, so that old series can be automatically purged.
 
 Points to remember:
 
-- Not all channels on UK Freeview have CRIDs in the EPG (at present just the BBC, ITV, C4 and C5 stables plus Sky 3).
+- Not all channels on UK Freeview have CRIDs in the EPG (at present just the BBC, ITV, C4 and C5 stables plus Sky 3 and Virgin 1).
 
 - Different programme providers have different ideas of what constitutes a 'series'.
 

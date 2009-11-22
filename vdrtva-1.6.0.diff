@@ -422,6 +422,18 @@ diff -ur vdr-1.6.0/sdt.c vdr-1.5/sdt.c
              default: ;
              }
            delete d;
+diff -ur vdr-1.6.0/timers.c vdr-1.5/timers.c
+--- vdr-1.6.0/timers.c	2008-03-09 13:43:20.000000000 +0000
++++ vdr-1.5/timers.c	2009-11-01 13:54:46.000000000 +0000
+@@ -413,7 +413,7 @@
+      }
+ 
+   if (HasFlags(tfActive)) {
+-     if (HasFlags(tfVps) && event && event->Vps()) {
++     if (HasFlags(tfVps) && event) {
+         if (Margin || !Directly) {
+            startTime = event->StartTime();
+            stopTime = event->EndTime();
 diff -ur vdr-1.6.0/vdr.5 vdr-1.5/vdr.5
 --- vdr-1.6.0/vdr.5	2008-03-09 15:46:57.000000000 +0000
 +++ vdr-1.5/vdr.5	2008-03-16 12:55:17.000000000 +0000
