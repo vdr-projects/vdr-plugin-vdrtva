@@ -24,14 +24,20 @@ use Socket;
 use POSIX;
 
 my (%CONFIG);
-$CONFIG{VDR_HOST}   = "localhost";		# Name or IP address of VDR server
-$CONFIG{VDR_PORT}   = 2001;			# SVDRP port on VDR server
-$CONFIG{SERIES_TIMEOUT}  = 30;			# Expiry time of a series (days)
-$CONFIG{START_PADDING} = 1;			# Padding when creating new timers
+$CONFIG{VDR_HOST} = "localhost";	# Name or IP address of VDR server
+$CONFIG{VDR_PORT} = 2001;		# SVDRP port on VDR server
+$CONFIG{SERIES_TIMEOUT} = 30;		# Expiry time of a series (days)
+$CONFIG{START_PADDING} = 1;		# Padding when creating new timers without VPS
 $CONFIG{STOP_PADDING} = 3;
-$CONFIG{PRIORITY} = 99;				# Recording priority and lifetime
+$CONFIG{PRIORITY} = 99;			# Recording priority and lifetime
 $CONFIG{LIFETIME} = 99;
-$CONFIG{LINKSDIR} = "/video/video";		# Directory holding links file
+$CONFIG{LINKSDIR} = "/video/video";	# Directory holding links file
+$CONFIG{VPS} = 1;			# 1 = control timer from EIT running status
+
+if ($CONFIG{VPS}) {
+  $CONFIG{START_PADDING} = 0;
+  $CONFIG{VPS} = 1;
+}
 
 my (@timers, @chans, @epg);
 my %links = {};
@@ -112,8 +118,9 @@ sub check_links {
 	  my $fstart = strftime("%Y-%m-%d:%H%M", localtime($st-$CONFIG{START_PADDING}*60));
 	  my $fend = strftime("%H%M", localtime($et+$CONFIG{STOP_PADDING}*60));
 	  my $title = get_title($sid,$st);
+	  my $flag = 1 + 4*$CONFIG{VPS};
           print STDOUT "New timer set for $scrid, \"$title\" at $fstart\n";
-	  set_timer ("1:$sid:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
+	  set_timer ("$flag:$sid:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
 	  my ($last_t,$val) = split(';', $links{$scrid});
           $links{$scrid} = "$st;$val:$icrid";
 	  $count++;
