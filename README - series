@@ -5,6 +5,8 @@ settings. The 'padding' values must match those used when you manually set timer
 
 If you set the 'VPS' config parameter to '1', and also set 'UseVps = 1' in VDR's setup.conf, new timers will be created to use the EIT Running Status to set start and end times. An accurate Running Status is a requirement of the Freeview Plus specification. However if the programme starts earlier than (scheduled time - VpsMargin) the beginning will be missed.
 
+The script detects split events, eg a film with a news summary in the middle, and ensures that if a timer is set for one part, all parts of the programme are recorded. The script also checks for timer clashes, though it doesn't try to resolve the clash.
+
 The script creates a file "links.data" in the vdr directory when run. This file contains series CRIDs of all of the timers which have been set, and the item CRIDs of the individual programmes which have had recordings scheduled. A timestamp against each entry gives the date of the last timer set, so that old series can be automatically purged.
 
 Points to remember:

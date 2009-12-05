@@ -49,6 +49,7 @@ get_timers();
 get_links();
 my $updates = check_timers();
 $updates += check_links();
+$updates += check_split_recordings();
 if ($updates) {
   put_links();
   @timers = ();
@@ -64,19 +65,11 @@ sub check_timers {
 
   my $count = 0;
   foreach my $timer (@timers) {
-#    my ($flag,$chan,$day,$start,$stop) = split(':', $timer);
     my $channelid = $chans[$timer->{chan}-1] -> {id};
-    my ($yy,$mm,$dd) = split('-', $timer->{day});
-    my $starth = $timer->{start} / 100;
-    my $startm = $timer->{start} % 100;
-    my $stoph = $timer->{stop} / 100;
-    my $stopm = $timer->{stop} % 100;
-    my $start_t = mktime(0, $startm, $starth, $dd, $mm-1, $yy-1900, 0, 0, -1);
-    if ($stoph < $starth) {	# prog over midnight
-      $dd++;
-    }
-    my $stop_t = mktime(0, $stopm, $stoph, $dd, $mm-1, $yy-1900, 0, 0, -1);
+    my $start_t = $timer->{tstart};
+    my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
+      next if $scrid eq 'NULL';
       my ($sid, $st, $et, $id, $icrid, $scrid) = split(',', $prog);
       if (($sid eq $channelid) && ($start_t <= $st) && ($stop_t >= $et)) {
         if (exists $links{$scrid}) {			# Existing series
@@ -104,6 +97,7 @@ sub check_links {
   my $count = 0;
   foreach my $prog (@epg) {
     my ($sid, $st, $et, $id, $icrid, $scrid) = split(',', $prog);
+    next if $scrid eq 'NULL';
     if (exists $links{$scrid}) {
       if ($links{$scrid} !~ /$icrid/) {
 #		Have we already recorded this programme on a diferent series?
@@ -139,16 +133,8 @@ sub check_timer_clashes
     my (@tstart, @tstop);
     print STDOUT "Checking for timer clashes\n";
     for ($ii = 0 ; $ii < @timers ; $ii++) {
-      my ($yy,$mm,$dd) = split('-', $timers[$ii]->{day});
-      my $starth = $timers[$ii]->{start} / 100;
-      my $startm = $timers[$ii]->{start} % 100;
-      my $stoph = $timers[$ii]->{stop} / 100;
-      my $stopm = $timers[$ii]->{stop} % 100;
-      push @tstart, mktime(0, $startm, $starth, $dd, $mm-1, $yy-1900, 0, 0, -1);
-      if ($stoph < $starth) {	# prog over midnight
-        $dd++;
-      }
-      push @tstop, mktime(0, $stopm, $stoph, $dd, $mm-1, $yy-1900, 0, 0, -1);
+      push @tstart, $timers[$ii]->{tstart};
+      push @tstop, $timers[$ii]->{tstop};
 
       for ($jj = 0 ; $jj < $ii ; $jj++) {
         if (($tstart[$ii] >= $tstart[$jj] && $tstart[$ii] < $tstop[$jj])
@@ -176,6 +162,57 @@ sub check_timer_clashes
     }
 }
 
+# Look for split events (eg a film with a news summary in the middle), and ensure
+# that all parts of the event are being recorded.
+# A split event has a # in the item CRID, for example /19778232#1
+# FIXME this will likely fail if a split event is repeated or is part of a series.
+
+sub check_split_recordings {
+
+  my $count = 0;
+  my @splits;
+  print STDOUT "Checking for split recordings\n";
+  foreach my $timer (@timers) {
+    my $channelid = $chans[$timer->{chan}-1] -> {id};
+    my $start_t = $timer->{tstart};
+    my $stop_t = $timer->{tstop};
+    foreach my $prog (@epg) {
+      my ($sid, $st, $et, $id, $icrid) = split(',', $prog);
+      if (($sid eq $channelid) && ($start_t <= $st) && ($stop_t >= $et)) {
+        if ($icrid =~ /\#/) {
+          push @splits, "$icrid:$st:$channelid";
+        }
+      }
+    }
+  }
+  foreach $split (@splits) {
+    my ($tcrid, $tstart, $tchan) = split(':', $split);
+    foreach my $prog (@epg) {
+      my ($sid, $st, $et, $id, $icrid) = split(',', $prog);
+      if (($icrid eq $tcrid) && ($tchan eq $sid) && ($st != $tstart)) {
+        my $got = 0;
+        foreach $split2 (@splits) {
+          my ($tcrid2, $tstart2, $tchan2) = split(':', $split2);
+          if (($icrid eq $tcrid2) && ($tchan2 eq $sid) && ($st == $tstart2)) {
+            $got = 1;
+          }
+        }
+        if (!$got) {
+          print STDOUT "Unset timer for split event $tcrid found!\n";
+          my $fstart = strftime("%Y-%m-%d:%H%M", localtime($st-$CONFIG{START_PADDING}*60));
+          my $fend = strftime("%H%M", localtime($et+$CONFIG{STOP_PADDING}*60));
+          my $title = get_title($sid,$st);
+          my $flag = 1 + 4*$CONFIG{VPS};
+          print STDOUT "New timer set for \"$title\" at $fstart\n";
+          set_timer ("$flag:$sid:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
+          $count++;
+        }
+      }
+    }
+  }
+  return $count;
+}
+
 
 # Read the timers from VDR
 
@@ -186,12 +223,21 @@ sub get_timers {
     chomp;
     /^\d*([- ])\d* (.*)/;
     my ($flag,$chan,$day,$start,$stop) = split(':', $2);
+    my ($yy,$mm,$dd) = split('-', $day);
+    my $starth = $start / 100;
+    my $startm = $start % 100;
+    my $stoph = $stop / 100;
+    my $stopm = $stop % 100;
+    my $tstart = mktime(0, $startm, $starth, $dd, $mm-1, $yy-1900, 0, 0, -1);
+    if ($stoph < $starth) {	# prog over midnight
+      $dd++;
+    }
+    my $tstop = mktime(0, $stopm, $stoph, $dd, $mm-1, $yy-1900, 0, 0, -1);
     push (@timers, {
 	flag => $flag,
 	chan => $chan,
-	day => $day,
-	start => $start,
-	stop => $stop
+	tstart => $tstart,
+	tstop => $tstop
     });
 #    last if substr($_, 3, 1) ne "-";
     last if $1 ne "-";
@@ -224,10 +270,10 @@ sub get_epg {
       $et = $st + $d;
     }
     elsif ($type eq 'e') {
-      if (($icrid ne "NULL") && ($scrid ne "NULL")) {
+      if ($icrid ne "NULL") {
         push @epg, join(',', $sid, $st, $et, $id, $icrid, $scrid);
+        $icrid = "NULL";
       }
-      $icrid = "NULL";
       $scrid = "NULL";
     }
     last if substr($_, 3, 1) ne "-";
