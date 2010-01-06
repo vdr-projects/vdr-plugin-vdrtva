@@ -4,3 +4,4 @@
 
 - ETSI 102 323 allows CRID data to be referenced indirectly via a Content Identifier Table (though this use is deprecated). Indirection is not supported as Freeview does not broadcast CITs.
 
+- series.pl should be smarter; it should choose the 'best' broadcast of an event, should workaround schedule clashes, and only record a series if the user requests it.

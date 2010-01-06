@@ -1,0 +1,1090 @@
+diff -ur vdr-1.7.11/channels.c vdr-1.7/channels.c
+--- vdr-1.7.11/channels.c	2010-01-02 17:38:40.000000000 +0000
++++ vdr-1.7/channels.c	2010-01-06 12:54:34.000000000 +0000
+@@ -188,6 +188,7 @@
+   shortName = strdup("");
+   provider = strdup("");
+   portalName = strdup("");
++  defaultAuthority = strdup("");
+   memset(&__BeginData__, 0, (char *)&__EndData__ - (char *)&__BeginData__);
+   inversion    = INVERSION_AUTO;
+   bandwidth    = 8000000;
+@@ -211,6 +212,7 @@
+   shortName = NULL;
+   provider = NULL;
+   portalName = NULL;
++  defaultAuthority = NULL;
+   schedule     = NULL;
+   linkChannels = NULL;
+   refChannel   = NULL;
+@@ -239,6 +241,7 @@
+   free(shortName);
+   free(provider);
+   free(portalName);
++  free(defaultAuthority);
+ }
+ 
+ cChannel& cChannel::operator= (const cChannel &Channel)
+@@ -247,6 +250,7 @@
+   shortName = strcpyrealloc(shortName, Channel.shortName);
+   provider = strcpyrealloc(provider, Channel.provider);
+   portalName = strcpyrealloc(portalName, Channel.portalName);
++  defaultAuthority = strcpyrealloc(defaultAuthority, Channel.defaultAuthority);
+   memcpy(&__BeginData__, &Channel.__BeginData__, (char *)&Channel.__EndData__ - (char *)&Channel.__BeginData__);
+   return *this;
+ }
+@@ -439,6 +443,13 @@
+      }
+ }
+ 
++void cChannel::SetDefaultAuthority(const char *DefaultAuthority)
++{
++  if (!isempty(DefaultAuthority) && strcmp(defaultAuthority, DefaultAuthority) != 0) {
++     defaultAuthority = strcpyrealloc(defaultAuthority, DefaultAuthority);
++     }
++}
++
+ #define STRDIFF 0x01
+ #define VALDIFF 0x02
+ 
+@@ -758,11 +769,11 @@
+         q += IntArrayToString(q, Channel->dpids, 10, Channel->dlangs);
+         }
+      *q = 0;
+-     char caidbuf[MAXCAIDS * 5 + 10]; // 5: 4 digits plus delimiting ',', 10: paranoia
++     char caidbuf[MAXCAIDS * 5 + 10 + 256]; // 5: 4 digits plus delimiting ',', 10 + max DNS domain length: paranoia
+      q = caidbuf;
+      q += IntArrayToString(q, Channel->caids, 16);
+      *q = 0;
+-     buffer = cString::sprintf("%s:%d:%s:%s:%d:%s:%s:%d:%s:%d:%d:%d:%d\n", FullName, Channel->frequency, *Channel->ParametersToString(), *cSource::ToString(Channel->source), Channel->srate, vpidbuf, apidbuf, Channel->tpid, caidbuf, Channel->sid, Channel->nid, Channel->tid, Channel->rid);
++     buffer = cString::sprintf("%s:%d:%s:%s:%d:%s:%s:%d:%s:%d:%d:%d:%d:%s\n", FullName, Channel->frequency, *Channel->ParametersToString(), *cSource::ToString(Channel->source), Channel->srate, vpidbuf, apidbuf, Channel->tpid, caidbuf, Channel->sid, Channel->nid, Channel->tid, Channel->rid, Channel->defaultAuthority);
+      }
+   return buffer;
+ }
+@@ -797,13 +808,16 @@
+      char *vpidbuf = NULL;
+      char *apidbuf = NULL;
+      char *caidbuf = NULL;
+-     int fields = sscanf(s, "%a[^:]:%d :%a[^:]:%a[^:] :%d :%a[^:]:%a[^:]:%d :%a[^:]:%d :%d :%d :%d ", &namebuf, &frequency, &parambuf, &sourcebuf, &srate, &vpidbuf, &apidbuf, &tpid, &caidbuf, &sid, &nid, &tid, &rid);
++     char *dabuf = NULL;
++     int fields = sscanf(s, "%a[^:]:%d :%a[^:]:%a[^:] :%d :%a[^:]:%a[^:]:%d :%a[^:]:%d :%d :%d :%d :%a[^:]", &namebuf, &frequency, &parambuf, &sourcebuf, &srate, &vpidbuf, &apidbuf, &tpid, &caidbuf, &sid, &nid, &tid, &rid, &dabuf);
+      if (fields >= 9) {
+         if (fields == 9) {
+            // allow reading of old format
+            sid = atoi(caidbuf);
+            delete caidbuf;
+            caidbuf = NULL;
++           delete dabuf;
++           dabuf = NULL;
+            caids[0] = tpid;
+            caids[1] = 0;
+            tpid = 0;
+@@ -912,12 +926,17 @@
+            }
+         name = strcpyrealloc(name, namebuf);
+ 
++        if (dabuf) {
++          defaultAuthority = strcpyrealloc(defaultAuthority, dabuf);
++        }
++
+         free(parambuf);
+         free(sourcebuf);
+         free(vpidbuf);
+         free(apidbuf);
+         free(caidbuf);
+         free(namebuf);
++        free(dabuf);
+         if (!GetChannelID().Valid()) {
+            esyslog("ERROR: channel data results in invalid ID!");
+            return false;
+diff -ur vdr-1.7.11/channels.h vdr-1.7/channels.h
+--- vdr-1.7.11/channels.h	2009-12-06 12:57:45.000000000 +0000
++++ vdr-1.7/channels.h	2010-01-06 12:54:34.000000000 +0000
+@@ -116,6 +116,7 @@
+   char *shortName;
+   char *provider;
+   char *portalName;
++  char *defaultAuthority;
+   int __BeginData__;
+   int frequency; // MHz
+   int source;
+@@ -171,6 +172,7 @@
+   const char *ShortName(bool OrName = false) const { return (OrName && isempty(shortName)) ? name : shortName; }
+   const char *Provider(void) const { return provider; }
+   const char *PortalName(void) const { return portalName; }
++  const char *DefaultAuthority(void) const { return defaultAuthority; }
+   int Frequency(void) const { return frequency; } ///< Returns the actual frequency, as given in 'channels.conf'
+   int Transponder(void) const;                    ///< Returns the transponder frequency in MHz, plus the polarization in case of sat
+   static int Transponder(int Frequency, char Polarization); ///< builds the transponder from the given Frequency and Polarization
+@@ -227,6 +229,7 @@
+   void SetId(int Nid, int Tid, int Sid, int Rid = 0);
+   void SetName(const char *Name, const char *ShortName, const char *Provider);
+   void SetPortalName(const char *PortalName);
++  void SetDefaultAuthority(const char *DefaultAuthority);
+   void SetPids(int Vpid, int Ppid, int Vtype, int *Apids, char ALangs[][MAXLANGCODE2], int *Dpids, char DLangs[][MAXLANGCODE2], int *Spids, char SLangs[][MAXLANGCODE2], int Tpid);
+   void SetCaIds(const int *CaIds); // list must be zero-terminated
+   void SetCaDescriptors(int Level);
+diff -ur vdr-1.7.11/config.c vdr-1.7/config.c
+--- vdr-1.7.11/config.c	2009-12-05 15:30:30.000000000 +0000
++++ vdr-1.7/config.c	2010-01-06 12:54:34.000000000 +0000
+@@ -258,6 +258,7 @@
+   UseSubtitle = 1;
+   UseVps = 0;
+   VpsMargin = 120;
++  VpsFallback = 0;
+   RecordingDirs = 1;
+   VideoDisplayFormat = 1;
+   VideoFormat = 0;
+@@ -445,6 +446,7 @@
+   else if (!strcasecmp(Name, "UseSubtitle"))         UseSubtitle        = atoi(Value);
+   else if (!strcasecmp(Name, "UseVps"))              UseVps             = atoi(Value);
+   else if (!strcasecmp(Name, "VpsMargin"))           VpsMargin          = atoi(Value);
++  else if (!strcasecmp(Name, "VpsFallback"))         VpsFallback      = atoi(Value);
+   else if (!strcasecmp(Name, "RecordingDirs"))       RecordingDirs      = atoi(Value);
+   else if (!strcasecmp(Name, "VideoDisplayFormat"))  VideoDisplayFormat = atoi(Value);
+   else if (!strcasecmp(Name, "VideoFormat"))         VideoFormat        = atoi(Value);
+@@ -537,6 +539,7 @@
+   Store("UseSubtitle",        UseSubtitle);
+   Store("UseVps",             UseVps);
+   Store("VpsMargin",          VpsMargin);
++  Store("VpsFallback",        VpsFallback);
+   Store("RecordingDirs",      RecordingDirs);
+   Store("VideoDisplayFormat", VideoDisplayFormat);
+   Store("VideoFormat",        VideoFormat);
+diff -ur vdr-1.7.11/config.h vdr-1.7/config.h
+--- vdr-1.7.11/config.h	2009-11-22 19:55:04.000000000 +0000
++++ vdr-1.7/config.h	2010-01-06 12:54:34.000000000 +0000
+@@ -238,6 +238,7 @@
+   int UseSubtitle;
+   int UseVps;
+   int VpsMargin;
++  int VpsFallback;
+   int RecordingDirs;
+   int VideoDisplayFormat;
+   int VideoFormat;
+diff -ur vdr-1.7.11/eit.c vdr-1.7/eit.c
+--- vdr-1.7.11/eit.c	2010-01-03 15:35:21.000000000 +0000
++++ vdr-1.7/eit.c	2010-01-06 12:54:34.000000000 +0000
+@@ -121,6 +121,8 @@
+       SI::Descriptor *d;
+       SI::ExtendedEventDescriptors *ExtendedEventDescriptors = NULL;
+       SI::ShortEventDescriptor *ShortEventDescriptor = NULL;
++      SI::ContentIdentifierDescriptor *itemCrid = NULL;
++      SI::ContentIdentifierDescriptor *seriesCrid = NULL;
+       cLinkChannels *LinkChannels = NULL;
+       cComponents *Components = NULL;
+       for (SI::Loop::Iterator it2; (d = SiEitEvent.eventDescriptors.getNext(it2)); ) {
+@@ -265,6 +267,23 @@
+                     }
+                  }
+                  break;
++            case SI::ContentIdentifierDescriptorTag: {
++                 SI::ContentIdentifierDescriptor *cd = (SI::ContentIdentifierDescriptor *)d;
++                 switch (cd->getCridType()) {
++                   case 0x01:
++                   case 0x31: {
++                        itemCrid = cd;
++                        d = NULL; // so that it is not deleted
++                        break;
++                   }
++                   case 0x02:
++                   case 0x32: {
++                        seriesCrid = cd;
++                        d = NULL; // so that it is not deleted
++                        break;
++                   }
++                 }
++            }
+             default: ;
+             }
+           delete d;
+@@ -286,9 +305,23 @@
+             }
+          else if (!HasExternalData)
+             pEvent->SetDescription(NULL);
++         if (itemCrid && (itemCrid->getCridLocation() == 0)) {
++            char buffer[Utf8BufSize(256)];
++            strcpy (buffer, channel->DefaultAuthority());
++            strcat(buffer, itemCrid->entry.getText());
++            pEvent->SetItemCRID(buffer);
+          }
++         if (seriesCrid && (seriesCrid->getCridLocation() == 0)) {
++            char buffer[Utf8BufSize(256)];
++            strcpy (buffer, channel->DefaultAuthority());
++            strcat(buffer, seriesCrid->entry.getText());
++            pEvent->SetSeriesCRID(buffer);
++         }
++      }
+       delete ExtendedEventDescriptors;
+       delete ShortEventDescriptor;
++      delete itemCrid;
++      delete seriesCrid;
+ 
+       pEvent->SetComponents(Components);
+ 
+diff -ur vdr-1.7.11/epg.c vdr-1.7/epg.c
+--- vdr-1.7.11/epg.c	2010-01-03 14:10:20.000000000 +0000
++++ vdr-1.7/epg.c	2010-01-06 13:03:01.000000000 +0000
+@@ -117,6 +117,8 @@
+   startTime = 0;
+   duration = 0;
+   vps = 0;
++  itemCRID = NULL;
++  seriesCRID = NULL;
+   SetSeen();
+ }
+ 
+@@ -125,6 +127,8 @@
+   free(title);
+   free(shortText);
+   free(description);
++  free(itemCRID);
++  free(seriesCRID);
+   delete components;
+ }
+ 
+@@ -220,6 +224,16 @@
+   vps = Vps;
+ }
+ 
++void cEvent::SetItemCRID(const char *CRID)
++{
++  itemCRID = strcpyrealloc(itemCRID, CRID);
++}
++
++void cEvent::SetSeriesCRID(const char *CRID)
++{
++  seriesCRID = strcpyrealloc(seriesCRID, CRID);
++}
++
+ void cEvent::SetSeen(void)
+ {
+   seen = time(NULL);
+@@ -450,6 +464,10 @@
+         }
+      if (vps)
+         fprintf(f, "%sV %ld\n", Prefix, vps);
++     if (!isempty(itemCRID))
++        fprintf(f, "%sY %s\n", Prefix, itemCRID);
++     if (!isempty(seriesCRID))
++        fprintf(f, "%sZ %s\n", Prefix, seriesCRID);
+      if (!InfoOnly)
+         fprintf(f, "%se\n", Prefix);
+      }
+@@ -488,6 +506,10 @@
+               break;
+     case 'V': SetVps(atoi(t));
+               break;
++    case 'Y': SetItemCRID(t);
++              break;
++    case 'Z': SetSeriesCRID(t);
++              break;
+     default:  esyslog("ERROR: unexpected tag while reading EPG data: %s", s);
+               return false;
+     }
+diff -ur vdr-1.7.11/epg.h vdr-1.7/epg.h
+--- vdr-1.7.11/epg.h	2010-01-03 14:39:14.000000000 +0000
++++ vdr-1.7/epg.h	2010-01-06 12:54:34.000000000 +0000
+@@ -83,6 +83,8 @@
+   int duration;            // Duration of this event in seconds
+   time_t vps;              // Video Programming Service timestamp (VPS, aka "Programme Identification Label", PIL)
+   time_t seen;             // When this event was last seen in the data stream
++  char *itemCRID;          // Item CRID
++  char *seriesCRID;        // Series CRID
+ public:
+   cEvent(tEventID EventID);
+   ~cEvent();
+@@ -103,6 +105,8 @@
+   time_t EndTime(void) const { return startTime + duration; }
+   int Duration(void) const { return duration; }
+   time_t Vps(void) const { return vps; }
++  const char *ItemCRID(void) const { return itemCRID; }
++  const char *SeriesCRID(void) const { return seriesCRID; }
+   time_t Seen(void) const { return seen; }
+   bool SeenWithin(int Seconds) const { return time(NULL) - seen < Seconds; }
+   bool HasTimer(void) const;
+@@ -126,6 +130,8 @@
+   void SetStartTime(time_t StartTime);
+   void SetDuration(int Duration);
+   void SetVps(time_t Vps);
++  void SetItemCRID(const char *CRID);
++  void SetSeriesCRID(const char *CRID);
+   void SetSeen(void);
+   cString ToDescr(void) const;
+   void Dump(FILE *f, const char *Prefix = "", bool InfoOnly = false) const;
+diff -ur vdr-1.7.11/libsi/descriptor.c vdr-1.7/libsi/descriptor.c
+--- vdr-1.7.11/libsi/descriptor.c	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/descriptor.c	2009-06-06 09:48:00.000000000 +0100
+@@ -643,6 +643,29 @@
+    textualServiceIdentifier.setData(data+sizeof(descr_service_identifier), getLength()-sizeof(descr_service_identifier));
+ }
+ 
++void ContentIdentifierDescriptor::Parse() {
++   int offset=0;
++   data.setPointerAndOffset<const descr_content_identifier>(s, offset);
++   if (s->crid_location == 0) {
++     entry.setData(data+(offset-1), s->crid_length);
++   }
++   else {
++      entry.setData(data+(offset-1), 2);
++   }
++}
++
++int ContentIdentifierDescriptor::getCridType() const {
++   return s->crid_type;
++}
++
++int ContentIdentifierDescriptor::getCridLocation() const {
++   return s->crid_location;
++}
++
++void DefaultAuthorityDescriptor::Parse() {
++   DefaultAuthority.setData(data+sizeof(descr_default_authority), getLength()-sizeof(descr_default_authority));
++}
++
+ void MultilingualNameDescriptor::Parse() {
+    nameLoop.setData(data+sizeof(descr_multilingual_network_name), getLength()-sizeof(descr_multilingual_network_name));
+ }
+diff -ur vdr-1.7.11/libsi/descriptor.h vdr-1.7/libsi/descriptor.h
+--- vdr-1.7.11/libsi/descriptor.h	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/descriptor.h	2009-06-06 09:48:00.000000000 +0100
+@@ -361,6 +361,25 @@
+    virtual void Parse();
+ };
+ 
++class ContentIdentifierDescriptor : public Descriptor {
++public:
++  String entry;
++  int getCridType() const;
++  int getCridLocation() const;
++//  virtual int getLength() { return sizeof(descr_content_identifier)+entry.getLength(); }
++   private:
++      const descr_content_identifier *s;
++protected:
++  virtual void Parse();
++};
++
++class DefaultAuthorityDescriptor : public Descriptor {
++public:
++   String DefaultAuthority; //ID
++protected:
++   virtual void Parse();
++};
++
+ //abstract base class
+ class MultilingualNameDescriptor : public Descriptor {
+ public:
+diff -ur vdr-1.7.11/libsi/headers.h vdr-1.7/libsi/headers.h
+--- vdr-1.7.11/libsi/headers.h	2007-02-03 11:45:58.000000000 +0000
++++ vdr-1.7/libsi/headers.h	2009-06-06 09:48:00.000000000 +0100
+@@ -1673,11 +1673,39 @@
+    u_char descriptor_length                      :8;
+ };
+ 
++struct entry_tva_id {
++   u_char tva_id_hi                              :8;
++   u_char tva_id_lo                              :8;
++#if BYTE_ORDER == BIG_ENDIAN
++   u_char reserved                               :5;
++   u_char running_status                         :3;
++#else
++   u_char running_status                         :3;
++   u_char reserved                               :5;
++#endif
++};
++
++
+ /* 0x76 content_identifier_descriptor (ETSI TS 102 323) */
+ 
+ struct descr_content_identifier {
+    u_char descriptor_tag                         :8;
+    u_char descriptor_length                      :8;
++#if BYTE_ORDER == BIG_ENDIAN
++   u_char crid_type                              :6;
++   u_char crid_location                          :2;
++#else
++   u_char crid_location                          :2;
++   u_char crid_type                              :6;
++#endif
++  union {
++    u_char crid_length                           :8;
++    u_char crid_ref_hi                           :8;
++  };
++  union {
++    u_char crid_byte                             :8;
++    u_char crid_ref_lo                           :8;
++  };
+ };
+ 
+ /* 0x77 time_slice_fec_identifier_descriptor (ETSI EN 301 192) */
+diff -ur vdr-1.7.11/libsi/si.c vdr-1.7/libsi/si.c
+--- vdr-1.7.11/libsi/si.c	2009-12-05 16:20:12.000000000 +0000
++++ vdr-1.7/libsi/si.c	2010-01-06 12:54:34.000000000 +0000
+@@ -605,6 +605,12 @@
+          case ExtensionDescriptorTag:
+             d=new ExtensionDescriptor();
+             break;
++         case ContentIdentifierDescriptorTag:
++            d=new ContentIdentifierDescriptor();
++            break;
++         case DefaultAuthorityDescriptorTag:
++            d=new DefaultAuthorityDescriptor();
++            break;
+ 
+          //note that it is no problem to implement one
+          //of the unimplemented descriptors.
+@@ -647,10 +653,8 @@
+          case TransportStreamDescriptorTag:
+ 
+          //defined in ETSI EN 300 468 v 1.7.1
+-         case DefaultAuthorityDescriptorTag:
+          case RelatedContentDescriptorTag:
+          case TVAIdDescriptorTag:
+-         case ContentIdentifierDescriptorTag:
+          case TimeSliceFecIdentifierDescriptorTag:
+          case ECMRepetitionRateDescriptorTag:
+          case EnhancedAC3DescriptorTag:
+diff -ur vdr-1.7.11/menu.c vdr-1.7/menu.c
+--- vdr-1.7.11/menu.c	2009-12-06 11:29:05.000000000 +0000
++++ vdr-1.7/menu.c	2010-01-06 12:54:34.000000000 +0000
+@@ -2698,6 +2698,7 @@
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use episode name"),          &data.UseSubtitle));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use VPS"),                   &data.UseVps));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$VPS margin (s)"),            &data.VpsMargin, 0));
++  Add(new cMenuEditBoolItem(tr("Setup.Recording$Use running status as VPS fallback"), &data.VpsFallback));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Mark instant recording"),    &data.MarkInstantRecord));
+   Add(new cMenuEditStrItem( tr("Setup.Recording$Name instant recording"),     data.NameInstantRecord, sizeof(data.NameInstantRecord)));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 1, MAXINSTANTRECTIME));
+diff -ur vdr-1.7.11/po/ca_ES.po vdr-1.7/po/ca_ES.po
+--- vdr-1.7.11/po/ca_ES.po	2010-01-04 14:38:20.000000000 +0000
++++ vdr-1.7/po/ca_ES.po	2010-01-06 13:05:28.000000000 +0000
+@@ -10,7 +10,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-02 19:02+0100\n"
+ "Last-Translator: Luca Olivetti <luca@ventoso.org>\n"
+ "Language-Team: Catalanian\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Marge VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Fer servir VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Marcar gravaci� instant�nia"
+ 
+diff -ur vdr-1.7.11/po/cs_CZ.po vdr-1.7/po/cs_CZ.po
+--- vdr-1.7.11/po/cs_CZ.po	2010-01-04 14:38:20.000000000 +0000
++++ vdr-1.7/po/cs_CZ.po	2010-01-06 13:05:28.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-28 15:00+0200\n"
+ "Last-Translator: Vladim�r B�rta <vladimir.barta@k2atmitec.cz>, Ji�� Dobr� <jdobry@centrum.cz>\n"
+ "Language-Team: Czech\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "�asov� rezerva pro VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Pou��vat VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Ozna�it okam�it� nahr�vky"
+ 
+diff -ur vdr-1.7.11/po/da_DK.po vdr-1.7/po/da_DK.po
+--- vdr-1.7.11/po/da_DK.po	2010-01-04 14:38:20.000000000 +0000
++++ vdr-1.7/po/da_DK.po	2010-01-06 13:05:28.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-08-12 14:17+0200\n"
+ "Last-Translator: Mogens Elneff <mogens@elneff.dk>\n"
+ "Language-Team: Danish\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS margin (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Anvend VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Mark�r direkte optagelse"
+ 
+diff -ur vdr-1.7.11/po/de_DE.po vdr-1.7/po/de_DE.po
+--- vdr-1.7.11/po/de_DE.po	2010-01-04 14:38:20.000000000 +0000
++++ vdr-1.7/po/de_DE.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-11-25 15:19+0200\n"
+ "Last-Translator: Klaus Schmidinger <kls@tvdr.de>\n"
+ "Language-Team: German\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Zeitvorlauf bei VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "VPS benutzen"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Direktaufzeichnung markieren"
+ 
+diff -ur vdr-1.7.11/po/el_GR.po vdr-1.7/po/el_GR.po
+--- vdr-1.7.11/po/el_GR.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/el_GR.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-08-12 14:17+0200\n"
+ "Last-Translator: Dimitrios Dimitrakos <mail@dimitrios.de>\n"
+ "Language-Team: Greek\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "��������� VPS (�)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "����� VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "������� ��������� ��������"
+ 
+diff -ur vdr-1.7.11/po/es_ES.po vdr-1.7/po/es_ES.po
+--- vdr-1.7.11/po/es_ES.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/es_ES.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-02 19:02+0100\n"
+ "Last-Translator: Luca Olivetti <luca@ventoso.org>\n"
+ "Language-Team: Spanish\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Margen VPS (sg)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Usar servicio VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Marcar grabaciones inmediatas"
+ 
+diff -ur vdr-1.7.11/po/et_EE.po vdr-1.7/po/et_EE.po
+--- vdr-1.7.11/po/et_EE.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/et_EE.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-08-12 14:17+0200\n"
+ "Last-Translator: Arthur Konovalov <artlov@gmail.com>\n"
+ "Language-Team: Estonian\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS-i algusvaru (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "VPS-i kasutamine"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Kiirsalvestuse m�rgistamine"
+ 
+diff -ur vdr-1.7.11/po/fi_FI.po vdr-1.7/po/fi_FI.po
+--- vdr-1.7.11/po/fi_FI.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/fi_FI.po	2010-01-06 13:05:29.000000000 +0000
+@@ -10,7 +10,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-08-15 15:52+0200\n"
+ "Last-Translator: Rolf Ahrenberg <rahrenbe@cc.hut.fi>\n"
+ "Language-Team: Finnish\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS-toiminnon aloitusmarginaali (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "K�yt� VPS-toimintoa"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Merkitse pikatallenne"
+ 
+diff -ur vdr-1.7.11/po/fr_FR.po vdr-1.7/po/fr_FR.po
+--- vdr-1.7.11/po/fr_FR.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/fr_FR.po	2010-01-06 13:05:29.000000000 +0000
+@@ -13,7 +13,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-27 18:14+0100\n"
+ "Last-Translator: Jean-Claude Repetto <jc@repetto.org>\n"
+ "Language-Team: French\n"
+@@ -996,6 +996,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Marge VPS"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Utiliser le VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Marquage enregistr. imm�diats"
+ 
+diff -ur vdr-1.7.11/po/hr_HR.po vdr-1.7/po/hr_HR.po
+--- vdr-1.7.11/po/hr_HR.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/hr_HR.po	2010-01-06 13:05:29.000000000 +0000
+@@ -9,7 +9,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-17 19:00+0100\n"
+ "Last-Translator: Adrian Caval <anrxc@sysphere.org>\n"
+ "Language-Team: Croatian\n"
+@@ -992,6 +992,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Vremenska rezerva kod VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Koristi VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Ozna�i direktno snimanje"
+ 
+diff -ur vdr-1.7.11/po/hu_HU.po vdr-1.7/po/hu_HU.po
+--- vdr-1.7.11/po/hu_HU.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/hu_HU.po	2010-01-06 13:05:29.000000000 +0000
+@@ -10,7 +10,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-12-01 21:42+0200\n"
+ "Last-Translator: Istv�n F�ley <ifuley@tigercomp.ro>\n"
+ "Language-Team: Hungarian\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Id�eltol�d�s VPS-n�l (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "VPS-t haszn�lni"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Direktfelv�tel megjel�l�se"
+ 
+diff -ur vdr-1.7.11/po/it_IT.po vdr-1.7/po/it_IT.po
+--- vdr-1.7.11/po/it_IT.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/it_IT.po	2010-01-06 13:05:29.000000000 +0000
+@@ -11,7 +11,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2009-11-28 22:50+0100\n"
+ "Last-Translator: Diego Pierotto <vdr-italian@tiscali.it>\n"
+ "Language-Team: Italian\n"
+@@ -997,6 +997,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Margine VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Utilizza VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Segna reg. immediata"
+ 
+diff -ur vdr-1.7.11/po/lt_LT.po vdr-1.7/po/lt_LT.po
+--- vdr-1.7.11/po/lt_LT.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/lt_LT.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.7.9\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2009-10-17 14:19+0200\n"
+ "Last-Translator: Valdemaras Pipiras <varas@ambernet.lt>\n"
+ "Language-Team: Lithuanian\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS buferio laikas (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Naudoti VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Pažymėti rankiniu būdu vykdomus įrašus"
+ 
+diff -ur vdr-1.7.11/po/nl_NL.po vdr-1.7/po/nl_NL.po
+--- vdr-1.7.11/po/nl_NL.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/nl_NL.po	2010-01-06 13:05:29.000000000 +0000
+@@ -11,7 +11,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-26 17:20+0100\n"
+ "Last-Translator: Johan Schuring <johan.schuring@vetteblei.nl>\n"
+ "Language-Team: Dutch\n"
+@@ -994,6 +994,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Marge VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "VPS gebruiken"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Direkte opnamen markeren"
+ 
+diff -ur vdr-1.7.11/po/nn_NO.po vdr-1.7/po/nn_NO.po
+--- vdr-1.7.11/po/nn_NO.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/nn_NO.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2007-08-12 14:17+0200\n"
+ "Last-Translator: Truls Slevigen <truls@slevigen.no>\n"
+ "Language-Team: Norwegian\n"
+@@ -991,6 +991,9 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr ""
+ 
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr ""
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Markere direkteopptak"
+ 
+diff -ur vdr-1.7.11/po/pl_PL.po vdr-1.7/po/pl_PL.po
+--- vdr-1.7.11/po/pl_PL.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/pl_PL.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-09 12:59+0100\n"
+ "Last-Translator: Michael Rakowski <mrak@gmx.de>\n"
+ "Language-Team:  Polish\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Margines VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "U�ywaj VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Zaznaczaj natychm. nagrywanie"
+ 
+diff -ur vdr-1.7.11/po/pt_PT.po vdr-1.7/po/pt_PT.po
+--- vdr-1.7.11/po/pt_PT.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/pt_PT.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-18 17:04+0100\n"
+ "Last-Translator: anonymous\n"
+ "Language-Team: Portuguese\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Margem do VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Usar VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Marcar grava��es imediatas"
+ 
+diff -ur vdr-1.7.11/po/ro_RO.po vdr-1.7/po/ro_RO.po
+--- vdr-1.7.11/po/ro_RO.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/ro_RO.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-25 00:39+0100\n"
+ "Last-Translator: Lucian Muresan <lucianm@users.sourceforge.net>\n"
+ "Language-Team: Romanian\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Marj� de timp la utilizare VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Utilizeaz� VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Marcheaz� �nregistrare imediat�"
+ 
+diff -ur vdr-1.7.11/po/ru_RU.po vdr-1.7/po/ru_RU.po
+--- vdr-1.7.11/po/ru_RU.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/ru_RU.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-12-15 14:37+0100\n"
+ "Last-Translator: Oleg Roitburd <oleg@roitburd.de>\n"
+ "Language-Team: Russian\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "�������� ����� VPS (���)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "������������ ������� VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "�������� ��������� ������� ������"
+ 
+diff -ur vdr-1.7.11/po/sk_SK.po vdr-1.7/po/sk_SK.po
+--- vdr-1.7.11/po/sk_SK.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/sk_SK.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2009-09-30 12:50+0100\n"
+ "Last-Translator: Milan Hrala <hrala.milan@gmail.com>\n"
+ "Language-Team: Slovak\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "�asov� rezerva pre VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Pou��va� VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Ozna�i� okam�it� nahr�vky"
+ 
+diff -ur vdr-1.7.11/po/sl_SI.po vdr-1.7/po/sl_SI.po
+--- vdr-1.7.11/po/sl_SI.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/sl_SI.po	2010-01-06 13:05:29.000000000 +0000
+@@ -8,7 +8,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-28 19:44+0100\n"
+ "Last-Translator: Matjaz Thaler <matjaz.thaler@guest.arnes.si>\n"
+ "Language-Team: Slovenian\n"
+@@ -991,6 +991,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "�asovna rezerva pri VPS (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Uporabi VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Ozna�i direktno snemanje"
+ 
+diff -ur vdr-1.7.11/po/sv_SE.po vdr-1.7/po/sv_SE.po
+--- vdr-1.7.11/po/sv_SE.po	2010-01-04 14:38:21.000000000 +0000
++++ vdr-1.7/po/sv_SE.po	2010-01-06 13:05:29.000000000 +0000
+@@ -10,7 +10,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-03-12 18:25+0100\n"
+ "Last-Translator: Magnus Andersson <svankan@bahnhof.se>\n"
+ "Language-Team: Swedish\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS marginal (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Anv�nd VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "M�rk direktinspelning"
+ 
+diff -ur vdr-1.7.11/po/tr_TR.po vdr-1.7/po/tr_TR.po
+--- vdr-1.7.11/po/tr_TR.po	2010-01-04 14:38:22.000000000 +0000
++++ vdr-1.7/po/tr_TR.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2008-02-28 00:33+0100\n"
+ "Last-Translator: Oktay Yolge�en <oktay_73@yahoo.de>\n"
+ "Language-Team: Turkish\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS tolerans (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "VPS kullan"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Derhal �ekimi i�aretle"
+ 
+diff -ur vdr-1.7.11/po/uk_UA.po vdr-1.7/po/uk_UA.po
+--- vdr-1.7.11/po/uk_UA.po	2010-01-04 14:38:22.000000000 +0000
++++ vdr-1.7/po/uk_UA.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.7.7\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2009-05-31 13:17+0200\n"
+ "Last-Translator: Yarema aka Knedlyk <yupadmin@gmail.com>\n"
+ "Language-Team: Ukrainian\n"
+@@ -990,6 +990,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "Буферний час VPS (сек)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "Використовувати сигнали VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "Помітити зроблені вручну записи"
+ 
+diff -ur vdr-1.7.11/po/zh_CN.po vdr-1.7/po/zh_CN.po
+--- vdr-1.7.11/po/zh_CN.po	2010-01-04 14:38:22.000000000 +0000
++++ vdr-1.7/po/zh_CN.po	2010-01-06 13:05:29.000000000 +0000
+@@ -7,7 +7,7 @@
+ msgstr ""
+ "Project-Id-Version: VDR 1.6.0\n"
+ "Report-Msgid-Bugs-To: <vdr-bugs@tvdr.de>\n"
+-"POT-Creation-Date: 2010-01-03 15:10+0100\n"
++"POT-Creation-Date: 2010-01-06 13:05+0000\n"
+ "PO-Revision-Date: 2009-09-23 23:50+0800\n"
+ "Last-Translator: Nan Feng <nfgx@21cn.com>\n"
+ "Language-Team: Chinese\n"
+@@ -993,6 +993,10 @@
+ msgid "Setup.Recording$VPS margin (s)"
+ msgstr "VPS 时间 (s)"
+ 
++#, fuzzy
++msgid "Setup.Recording$Use running status as VPS fallback"
++msgstr "使用VPS"
++
+ msgid "Setup.Recording$Mark instant recording"
+ msgstr "标记直接记录"
+ 
+diff -ur vdr-1.7.11/sdt.c vdr-1.7/sdt.c
+--- vdr-1.7.11/sdt.c	2009-12-23 16:02:47.000000000 +0000
++++ vdr-1.7/sdt.c	2010-01-06 12:54:34.000000000 +0000
+@@ -127,6 +127,12 @@
+                      }
+                  }
+                  break;
++            case SI::DefaultAuthorityDescriptorTag: {
++                 SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
++                   char DaBuf[Utf8BufSize(1024)];
++                   da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
++                   channel->SetDefaultAuthority(DaBuf);
++              }
+             default: ;
+             }
+           delete d;
+diff -ur vdr-1.7.11/timers.c vdr-1.7/timers.c
+--- vdr-1.7.11/timers.c	2009-08-09 13:43:20.000000000 +0100
++++ vdr-1.7/timers.c	2009-12-30 09:28:39.000000000 +0000
+@@ -423,7 +423,7 @@
+      }
+ 
+   if (HasFlags(tfActive)) {
+-     if (HasFlags(tfVps) && event && event->Vps()) {
++     if (HasFlags(tfVps) && event && (Setup.VpsFallback || event->Vps())) {
+         if (Margin || !Directly) {
+            startTime = event->StartTime();
+            stopTime = event->EndTime();
+diff -ur vdr-1.7.11/vdr.5 vdr-1.7/vdr.5
+--- vdr-1.7.11/vdr.5	2010-01-03 13:37:07.000000000 +0000
++++ vdr-1.7/vdr.5	2010-01-06 13:04:40.000000000 +0000
+@@ -240,6 +240,9 @@
+ .B RID
+ The Radio ID of this channel (typically 0, may be used to distinguish channels where
+ NID, TID and SID are all equal).
++.TP
++.B Default Authority
++The Default Authority for CRIDs on this channel (TVAnytime).
+ .PP
+ A particular channel can be uniquely identified by its \fBchannel\ ID\fR,
+ which is a string that looks like this:
+@@ -699,6 +702,8 @@
+ \fBR\fR@<parental rating>
+ \fBX\fR@<stream> <type> <language> <descr>
+ \fBV\fR@<vps time>
++\fBY\fR@<item CRID>
++\fBZ\fR@<series CRID>
+ \fBe\fR@
+ \fBc\fR@
+ .TE
+@@ -733,6 +738,8 @@
+ <language>     @is the three letter language code (optionally two codes, separated by '+')
+ <descr>        @is the description of this stream component
+ <vps time>     @is the Video Programming Service time of this event
++<item CRID>    @is the CRID of this event (TVAnytime)
++<series CRID>  @is the CRID of the series which this event is part of (TVAnytime)
+ .TE
+ 
+ This file will be read at program startup in order to restore the results of

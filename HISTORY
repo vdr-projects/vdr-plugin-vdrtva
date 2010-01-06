@@ -24,6 +24,13 @@
 - New patch for development version of vdr.
 
 2009/11/22 - Version 0.0.6 (vdr versions 1.6.0-2 and 1.7.10)
-- timer.c   - Apply an old VPS patch by Anssi Hannula to use Running Status for VPS.
+- timers.c  - Apply an old VPS patch by Anssi Hannula to use Running Status for VPS.
 - series.pl - Auto-created timers use Running Status to set start/stop times.
 - README-vps  New file.
+
+2010/1/6 - Version 0.0.7 (vdr versions 1.6.0-2 and 1.7.11)
+- config.c
+- menu.c
+- timers.c - Modify VPS patch to use a new config parameter 'VpsFallback' to determine whether to use Running Status for accurate recording. Config changes based on the Mandriva source for vdr.
+- epg.c    - Change the ID letters used for the CRIDs in epg.data to X and Y, because vdr now uses R for Parental Rating. Note that this will cause error messages in the log when viewing old recordings but these are harmless.
+- vdr.5    - Updated man page with new CRID IDs.

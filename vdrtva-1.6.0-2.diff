@@ -124,9 +124,61 @@ diff -ur vdr-1.6.0/channels.h vdr-1.5/channels.h
    void SetPids(int Vpid, int Ppid, int *Apids, char ALangs[][MAXLANGCODE2], int *Dpids, char DLangs[][MAXLANGCODE2], int *Spids, char SLangs[][MAXLANGCODE2], int Tpid);
    void SetCaIds(const int *CaIds); // list must be zero-terminated
    void SetCaDescriptors(int Level);
+diff -ur vdr-1.6.0/config.c vdr-1.5/config.c
+--- vdr-1.6.0/config.c	2008-02-17 13:39:00.000000000 +0000
++++ vdr-1.5/config.c	2009-12-31 15:11:46.000000000 +0000
+@@ -255,6 +255,7 @@
+   UseSubtitle = 1;
+   UseVps = 0;
+   VpsMargin = 120;
++  VpsFallback = 0;
+   RecordingDirs = 1;
+   VideoDisplayFormat = 1;
+   VideoFormat = 0;
+@@ -428,6 +429,7 @@
+   else if (!strcasecmp(Name, "UseSubtitle"))         UseSubtitle        = atoi(Value);
+   else if (!strcasecmp(Name, "UseVps"))              UseVps             = atoi(Value);
+   else if (!strcasecmp(Name, "VpsMargin"))           VpsMargin          = atoi(Value);
++  else if (!strcasecmp(Name, "VpsFallback"))         VpsFallback        = atoi(Value);
+   else if (!strcasecmp(Name, "RecordingDirs"))       RecordingDirs      = atoi(Value);
+   else if (!strcasecmp(Name, "VideoDisplayFormat"))  VideoDisplayFormat = atoi(Value);
+   else if (!strcasecmp(Name, "VideoFormat"))         VideoFormat        = atoi(Value);
+@@ -511,6 +513,7 @@
+   Store("UseSubtitle",        UseSubtitle);
+   Store("UseVps",             UseVps);
+   Store("VpsMargin",          VpsMargin);
++  Store("VpsFallback",        VpsFallback);
+   Store("RecordingDirs",      RecordingDirs);
+   Store("VideoDisplayFormat", VideoDisplayFormat);
+   Store("VideoFormat",        VideoFormat);
+diff -ur vdr-1.6.0/config.h vdr-1.5/config.h
+--- vdr-1.6.0/config.h	2010-01-03 19:44:47.000000000 +0000
++++ vdr-1.5/config.h	2009-12-31 15:09:37.000000000 +0000
+@@ -237,6 +237,7 @@
+   int UseSubtitle;
+   int UseVps;
+   int VpsMargin;
++  int VpsFallback;
+   int RecordingDirs;
+   int VideoDisplayFormat;
+   int VideoFormat;
+diff -ur vdr-1.6.0/dvbdevice.h vdr-1.5/dvbdevice.h
+--- vdr-1.6.0/dvbdevice.h	2008-02-08 13:48:31.000000000 +0000
++++ vdr-1.5/dvbdevice.h	2009-05-31 16:28:58.000000000 +0100
+@@ -15,8 +15,8 @@
+ #include "device.h"
+ #include "dvbspu.h"
+ 
+-#if DVB_API_VERSION != 3
+-#error VDR requires Linux DVB driver API version 3!
++#if (DVB_API_VERSION != 3) && (DVB_API_VERSION != 5)
++#error VDR requires Linux DVB driver API version 3 or 5!
+ #endif
+ 
+ #define MAXDVBDEVICES  8
 diff -ur vdr-1.6.0/eit.c vdr-1.5/eit.c
---- vdr-1.6.0/eit.c	2008-09-30 18:18:46.000000000 +0100
-+++ vdr-1.5/eit.c	2008-09-07 11:29:49.000000000 +0100
+--- vdr-1.6.0/eit.c	2010-01-03 19:44:41.000000000 +0000
++++ vdr-1.5/eit.c	2008-10-14 20:10:48.000000000 +0100
 @@ -110,6 +110,8 @@
        SI::Descriptor *d;
        SI::ExtendedEventDescriptors *ExtendedEventDescriptors = NULL;
@@ -160,20 +212,24 @@ diff -ur vdr-1.6.0/eit.c vdr-1.5/eit.c
              default: ;
              }
            delete d;
-@@ -248,9 +267,23 @@
+@@ -248,9 +267,27 @@
              }
           else if (!HasExternalData)
              pEvent->SetDescription(NULL);
 +         if (itemCrid && (itemCrid->getCridLocation() == 0)) {
 +            char buffer[Utf8BufSize(256)];
++            char buff2[Utf8BufSize(256)];
 +            strcpy (buffer, channel->DefaultAuthority());
-+            strcat(buffer, itemCrid->entry.getText());
++            itemCrid->entry.getText(buff2, sizeof(buff2));
++            strcat(buffer, buff2);
 +            pEvent->SetItemCRID(buffer);
           }
 +         if (seriesCrid && (seriesCrid->getCridLocation() == 0)) {
 +            char buffer[Utf8BufSize(256)];
++            char buff2[Utf8BufSize(256)];
 +            strcpy (buffer, channel->DefaultAuthority());
-+            strcat(buffer, seriesCrid->entry.getText());
++            seriesCrid->entry.getText(buff2, sizeof(buff2));
++            strcat(buffer, buff2);
 +            pEvent->SetSeriesCRID(buffer);
 +         }
 +      }
@@ -406,6 +462,17 @@ diff -ur vdr-1.6.0/libsi/si.c vdr-1.5/libsi/si.c
           case TimeSliceFecIdentifierDescriptorTag:
           case ECMRepetitionRateDescriptorTag:
           case EnhancedAC3DescriptorTag:
+diff -ur vdr-1.6.0/menu.c vdr-1.5/menu.c
+--- vdr-1.6.0/menu.c	2008-03-16 11:15:28.000000000 +0000
++++ vdr-1.5/menu.c	2009-12-31 15:14:34.000000000 +0000
+@@ -2753,6 +2753,7 @@
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use episode name"),          &data.UseSubtitle));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use VPS"),                   &data.UseVps));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$VPS margin (s)"),            &data.VpsMargin, 0));
++  Add(new cMenuEditBoolItem(tr("Setup.Recording$Use running status as VPS fallback"), &data.VpsFallback));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Mark instant recording"),    &data.MarkInstantRecord));
+   Add(new cMenuEditStrItem( tr("Setup.Recording$Name instant recording"),     data.NameInstantRecord, sizeof(data.NameInstantRecord)));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 1, MAXINSTANTRECTIME));
 diff -ur vdr-1.6.0/sdt.c vdr-1.5/sdt.c
 --- vdr-1.6.0/sdt.c	2008-02-08 13:48:31.000000000 +0000
 +++ vdr-1.5/sdt.c	2008-02-17 15:13:46.000000000 +0000
@@ -423,14 +490,14 @@ diff -ur vdr-1.6.0/sdt.c vdr-1.5/sdt.c
              }
            delete d;
 diff -ur vdr-1.6.0/timers.c vdr-1.5/timers.c
---- vdr-1.6.0/timers.c	2008-08-09 13:43:20.000000000 +0000
-+++ vdr-1.5/timers.c	2009-11-01 13:54:46.000000000 +0000
+--- vdr-1.6.0/timers.c	2010-01-03 19:44:41.000000000 +0000
++++ vdr-1.5/timers.c	2009-12-31 15:16:18.000000000 +0000
 @@ -413,7 +413,7 @@
       }
  
    if (HasFlags(tfActive)) {
 -     if (HasFlags(tfVps) && event && event->Vps()) {
-+     if (HasFlags(tfVps) && event) {
++     if (HasFlags(tfVps) && event && (Setup.VpsFallback || event->Vps())) {
          if (Margin || !Directly) {
             startTime = event->StartTime();
             stopTime = event->EndTime();

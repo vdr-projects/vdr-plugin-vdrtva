@@ -259,10 +259,10 @@ sub get_epg {
     if ($type eq 'C') {
       ($sid) = ($data =~ /^(.*?) /);
     }
-    elsif ($type eq 'I') {
+    elsif ($type eq 'X') {
       $icrid = $data;
     }
-    elsif ($type eq 'R') {
+    elsif ($type eq 'Y') {
       $scrid = $data;
     }
     elsif ($type eq 'E') {

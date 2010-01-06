@@ -4,7 +4,7 @@ VDR can control timers from the running status by using 'VPS' functions in conju
 
 To use VPS for accurate recording, some conditions must be met:
 
-- Parameter 'UseVps' in VDR's setup.conf must be set to 1
+- Parameters 'UseVps' and 'VpsFallback' in VDR's setup.conf must both be set to 1
 - Timers must have the 'use VPS' flag set in timers.conf
 - The start time of a timer must be set to exactly the scheduled start time of the programme (ie no padding).
 
