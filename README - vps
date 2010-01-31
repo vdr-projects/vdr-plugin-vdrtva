@@ -14,3 +14,5 @@ With these conditions met, the sequence of events is:
 - VDR monitors the running status of the programme to be recorded
 - When the running status changes to 'running', VDR starts recording
 - When the running status changes to 'not running', VDR stops recording and deletes the timer.
+
+CAUTION - VPS recordings seem to have a lower priority than live viewing. VDR will not interrupt live viewing to start looking for the start of a recording.
