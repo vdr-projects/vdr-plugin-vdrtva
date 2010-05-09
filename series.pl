@@ -57,6 +57,7 @@ if ($updates) {
 }
 #show_links();
 check_timer_clashes();
+check_changed_events();
 close_SVDRP();
 
 # Examine each timer and update the links file if necessary (manually-added timers)
@@ -151,7 +152,8 @@ sub check_timer_clashes
 		# What to do?? For now just report the collision
                my $ttl1 = get_title($chans[$timers[$ii]->{chan}-1]->{id}, $tstart[$ii]+$CONFIG{START_PADDING}*60);
                my $ttl2 = get_title($chans[$timers[$jj]->{chan}-1]->{id}, $tstart[$jj]+$CONFIG{START_PADDING}*60);
-               print STDOUT "Collision! $timers[$ii]->{day} $timers[$ii]->{start}\n$ttl1 <-> $ttl2\n";
+	       my $when = localtime ($timers[$ii]->{tstart});
+               print STDOUT "Collision! $when\n$ttl1 <-> $ttl2\n";
              }
            }
         }
@@ -213,6 +215,22 @@ sub check_split_recordings {
   return $count;
 }
 
+#	Scan the timers list for events which have changed since the timer was
+#	set. For now we just report the error. TODO: if the event has moved maybe #	we should try to find the new one?
+
+sub check_changed_events {
+
+  print STDOUT "Checking for changed timer events\n";
+  foreach my $timer (@timers) {
+    my $channelid = $chans[$timer->{chan}-1] -> {id};
+    my $start_t = $timer->{tstart};
+    my $timer_title = $timer ->{title};
+    my $event_title = get_title ($channelid, $start_t);
+    if ($timer_title ne $event_title) {
+      print STDOUT "Event: $event_title <=> Timer: $timer_title\n";
+    }
+  }
+}
 
 # Read the timers from VDR
 
@@ -222,7 +240,7 @@ sub get_timers {
   while (<SOCK>) {
     chomp;
     /^\d*([- ])\d* (.*)/;
-    my ($flag,$chan,$day,$start,$stop) = split(':', $2);
+    my ($flag,$chan,$day,$start,$stop,$prio,$life,$title) = split(':', $2);
     my ($yy,$mm,$dd) = split('-', $day);
     my $starth = $start / 100;
     my $startm = $start % 100;
@@ -237,7 +255,8 @@ sub get_timers {
 	flag => $flag,
 	chan => $chan,
 	tstart => $tstart,
-	tstop => $tstop
+	tstop => $tstop,
+	title => $title
     });
 #    last if substr($_, 3, 1) ne "-";
     last if $1 ne "-";

@@ -34,3 +34,6 @@
 - timers.c - Modify VPS patch to use a new config parameter 'VpsFallback' to determine whether to use Running Status for accurate recording. Config changes based on the Mandriva source for vdr.
 - epg.c    - Change the ID letters used for the CRIDs in epg.data to X and Y, because vdr now uses R for Parental Rating. Note that this will cause error messages in the log when viewing old recordings but these are harmless.
 - vdr.5    - Updated man page with new CRID IDs.
+
+2010/5/9 - Version 0.0.8 (vdr versions 1.6.0-2 and 1.7.14)
+series.pl - Ensure that all parts of split events (eg a long film with a news summary in the middle) are recorded. Warn if the title of an event in the EPG has changed since a timer was set - maybe it is no longer the same programme...
