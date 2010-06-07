@@ -37,3 +37,6 @@
 
 2010/5/9 - Version 0.0.8 (vdr versions 1.6.0-2 and 1.7.14)
 series.pl - Ensure that all parts of split events (eg a long film with a news summary in the middle) are recorded. Warn if the title of an event in the EPG has changed since a timer was set - maybe it is no longer the same programme...
+
+2010/6/6- Version 0.0.9 (vdr versions 1.6.0-2 and 1.7.15)
+series.pl - Don't try to process timers if there aren't any. Change default SVRDP port to 6419 in line with VDR 1.7.15.
