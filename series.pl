@@ -25,7 +25,7 @@ use POSIX;
 
 my (%CONFIG);
 $CONFIG{VDR_HOST} = "localhost";	# Name or IP address of VDR server
-$CONFIG{VDR_PORT} = 2001;		# SVDRP port on VDR server
+$CONFIG{VDR_PORT} = 6419;		# SVDRP port on VDR server (use 2001 pre - 1.7.15)
 $CONFIG{SERIES_TIMEOUT} = 30;		# Expiry time of a series (days)
 $CONFIG{START_PADDING} = 1;		# Padding when creating new timers without VPS
 $CONFIG{STOP_PADDING} = 3;
@@ -41,23 +41,28 @@ if ($CONFIG{VPS}) {
 
 my (@timers, @chans, @epg);
 my %links = {};
+my $updates = 0;
 
 open_SVDRP();
 get_channels();
 get_epg();
 get_timers();
 get_links();
-my $updates = check_timers();
-$updates += check_links();
-$updates += check_split_recordings();
-if ($updates) {
-  put_links();
-  @timers = ();
-  get_timers();
+if (scalar (@timers)) {
+  $updates = check_timers();
 }
+  $updates += check_links();
+if (scalar (@timers)) {
+  $updates += check_split_recordings();
+  if ($updates) {
+    put_links();
+    @timers = ();
+    get_timers();
+  }
 #show_links();
-check_timer_clashes();
-check_changed_events();
+  check_timer_clashes();
+  check_changed_events();
+}
 close_SVDRP();
 
 # Examine each timer and update the links file if necessary (manually-added timers)
@@ -239,26 +244,26 @@ sub get_timers {
   Send("LSTT");
   while (<SOCK>) {
     chomp;
-    /^\d*([- ])\d* (.*)/;
-    my ($flag,$chan,$day,$start,$stop,$prio,$life,$title) = split(':', $2);
-    my ($yy,$mm,$dd) = split('-', $day);
-    my $starth = $start / 100;
-    my $startm = $start % 100;
-    my $stoph = $stop / 100;
-    my $stopm = $stop % 100;
-    my $tstart = mktime(0, $startm, $starth, $dd, $mm-1, $yy-1900, 0, 0, -1);
-    if ($stoph < $starth) {	# prog over midnight
-      $dd++;
-    }
-    my $tstop = mktime(0, $stopm, $stoph, $dd, $mm-1, $yy-1900, 0, 0, -1);
-    push (@timers, {
+    if (/^\d*([- ])\d* (.*)/) {
+      my ($flag,$chan,$day,$start,$stop,$prio,$life,$title) = split(':', $2);
+      my ($yy,$mm,$dd) = split('-', $day);
+      my $starth = $start / 100;
+      my $startm = $start % 100;
+      my $stoph = $stop / 100;
+      my $stopm = $stop % 100;
+      my $tstart = mktime(0, $startm, $starth, $dd, $mm-1, $yy-1900, 0, 0, -1);
+      if ($stoph < $starth) {	# prog over midnight
+        $dd++;
+      }
+      my $tstop = mktime(0, $stopm, $stoph, $dd, $mm-1, $yy-1900, 0, 0, -1);
+      push (@timers, {
 	flag => $flag,
 	chan => $chan,
 	tstart => $tstart,
 	tstop => $tstop,
 	title => $title
-    });
-#    last if substr($_, 3, 1) ne "-";
+      });
+    }
     last if $1 ne "-";
   }
   print STDOUT "Read ",scalar(@timers)," Timers\n";
@@ -274,7 +279,7 @@ sub get_epg {
   Send("LSTE");
   while (<SOCK>) {
     chomp;
-    my ($type,$data) = /^215.(.) *(.*)$/;
+    if (my ($flag,$type,$data) = /^215(.)(.) *(.*)$/) {
     if ($type eq 'C') {
       ($sid) = ($data =~ /^(.*?) /);
     }
@@ -295,7 +300,8 @@ sub get_epg {
       }
       $scrid = "NULL";
     }
-    last if substr($_, 3, 1) ne "-";
+    last if $flag ne "-";
+}
   }
   print STDOUT "Read ",scalar(@epg)," EPG lines\n";
 }
@@ -307,14 +313,14 @@ sub get_channels {
   Send("LSTC");
   while (<SOCK>) {
     chomp;
-    /^\d*([- ])\d* (.*)/;
-#print STDOUT $2;
-    my ($name,$f,$p,$t,$d4,$d5,$d6,$d7,$d8,$id1,$id2,$id3) = split(':', $2);
-    push (@chans, {
+    if (/^\d*([- ])\d* (.*)/) {
+      my ($name,$f,$p,$t,$d4,$d5,$d6,$d7,$d8,$id1,$id2,$id3) = split(':', $2);
+      push (@chans, {
 	id => join('-', $t, $id2, $id3, $id1),
 	transponder => join('-', $t, $f),
 	name => $name
-    });
+      });
+    }
     last if $1 ne "-";
   }
   print STDOUT "Read ",scalar(@chans)," Channels\n";
