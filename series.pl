@@ -51,7 +51,7 @@ get_links();
 if (scalar (@timers)) {
   $updates = check_timers();
 }
-  $updates += check_links();
+$updates += check_links();
 if (scalar (@timers)) {
   $updates += check_split_recordings();
   if ($updates) {
@@ -71,7 +71,7 @@ sub check_timers {
 
   my $count = 0;
   foreach my $timer (@timers) {
-    my $channelid = $chans[$timer->{chan}-1] -> {id};
+    my $channelid = $chans[$timer->{chan}] -> {id};
     my $start_t = $timer->{tstart};
     my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
@@ -143,29 +143,33 @@ sub check_timer_clashes
       push @tstop, $timers[$ii]->{tstop};
 
       for ($jj = 0 ; $jj < $ii ; $jj++) {
-        if (($tstart[$ii] >= $tstart[$jj] && $tstart[$ii] < $tstop[$jj])
-          || ($tstart[$jj] >= $tstart[$ii] && $tstart[$jj] < $tstop[$ii]))
-          {
-                # Timers collide in time. Check if the
-		# Timers are on the same transponder
-             my $t1 = $chans[$timers[$ii]->{chan}-1] -> {transponder};
-             my $t2 = $chans[$timers[$jj]->{chan}-1] -> {transponder};
-             if ($t1 eq $t2) {
-#               print STDOUT "Multiple recordings on same transponder - OK\n";
-             }
-             else {
-		# What to do?? For now just report the collision
-               my $ttl1 = get_title($chans[$timers[$ii]->{chan}-1]->{id}, $tstart[$ii]+$CONFIG{START_PADDING}*60);
-               my $ttl2 = get_title($chans[$timers[$jj]->{chan}-1]->{id}, $tstart[$jj]+$CONFIG{START_PADDING}*60);
-	       my $when = localtime ($timers[$ii]->{tstart});
-               print STDOUT "Collision! $when\n$ttl1 <-> $ttl2\n";
-             }
-           }
+        if (is_clash($ii, $jj)) {
+	  # What to do?? For now just report the collision
+          my $ttl1 = get_title($chans[$timers[$ii]->{chan}]->{id}, $tstart[$ii]+$CONFIG{START_PADDING}*60);
+          my $ttl2 = get_title($chans[$timers[$jj]->{chan}]->{id}, $tstart[$jj]+$CONFIG{START_PADDING}*60);
+	  my $when = localtime ($timers[$ii]->{tstart});
+          print STDOUT "Collision! $when\n$ttl1 <-> $ttl2\n";
         }
+      }
     }
 
     sub is_clash {
-	return 1;
+      my ($i, $j) = @_;
+      if (($tstart[$i] >= $tstart[$j] && $tstart[$i] < $tstop[$j])
+        || ($tstart[$j] >= $tstart[$i] && $tstart[$j] < $tstop[$i])) {
+                # Timers collide in time. Check if the
+		# Timers are on the same transponder
+         my $t1 = $chans[$timers[$i]->{chan}] -> {transponder};
+         my $t2 = $chans[$timers[$j]->{chan}] -> {transponder};
+         if ($t1 eq $t2) {
+#               print STDOUT "Multiple recordings on same transponder - OK\n";
+           return 0;
+         }
+         else {
+	   return 1;
+         }
+      }
+      return 0;
     }
 }
 
@@ -180,7 +184,7 @@ sub check_split_recordings {
   my @splits;
   print STDOUT "Checking for split recordings\n";
   foreach my $timer (@timers) {
-    my $channelid = $chans[$timer->{chan}-1] -> {id};
+    my $channelid = $chans[$timer->{chan}] -> {id};
     my $start_t = $timer->{tstart};
     my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
@@ -227,7 +231,7 @@ sub check_changed_events {
 
   print STDOUT "Checking for changed timer events\n";
   foreach my $timer (@timers) {
-    my $channelid = $chans[$timer->{chan}-1] -> {id};
+    my $channelid = $chans[$timer->{chan}] -> {id};
     my $start_t = $timer->{tstart};
     my $timer_title = $timer ->{title};
     my $event_title = get_title ($channelid, $start_t);
@@ -306,10 +310,15 @@ sub get_epg {
   print STDOUT "Read ",scalar(@epg)," EPG lines\n";
 }
 
-# Read the channels list from VDR
+# Read the channels list from VDR. Channel numbers are 1-based not 0-based...
 
 sub get_channels {
 
+  push (@chans, {
+    id => '0-0-0-0',
+    transponder => '0-0',
+    name => 'Dummy'
+  });
   Send("LSTC");
   while (<SOCK>) {
     chomp;
@@ -369,6 +378,7 @@ sub put_links {
     rename "$CONFIG{LINKSDIR}/links.data", "$CONFIG{LINKSDIR}/links.data.old";
   }
   rename "$CONFIG{LINKSDIR}/links.data.new", "$CONFIG{LINKSDIR}/links.data";
+  print STDOUT "Wrote ",scalar(keys(%links))," Links\n";
 }
 
 # Display the links
