@@ -75,8 +75,8 @@ sub check_timers {
     my $start_t = $timer->{tstart};
     my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
-      next if $scrid eq 'NULL';
       my ($sid, $st, $et, $id, $icrid, $scrid) = split(',', $prog);
+      next if $scrid eq 'NULL';
       if (($sid eq $channelid) && ($start_t <= $st) && ($stop_t >= $et)) {
         if (exists $links{$scrid}) {			# Existing series
           if ($links{$scrid} !~ /$icrid/) {
@@ -225,7 +225,8 @@ sub check_split_recordings {
 }
 
 #	Scan the timers list for events which have changed since the timer was
-#	set. For now we just report the error. TODO: if the event has moved maybe #	we should try to find the new one?
+#	set. For now we just report the error. TODO: if the event has moved maybe 
+#	we should try to find the new one?
 
 sub check_changed_events {
 
