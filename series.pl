@@ -75,9 +75,10 @@ sub check_timers {
     my $start_t = $timer->{tstart};
     my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
-      my ($sid, $st, $et, $id, $icrid, $scrid) = split(',', $prog);
+      my $scrid = $prog->{scrid};
+      my $icrid = $prog->{icrid};
       next if $scrid eq 'NULL';
-      if (($sid eq $channelid) && ($start_t <= $st) && ($stop_t >= $et)) {
+      if (($prog->{sid} eq $channelid) && ($start_t <= $prog->{st}) && ($stop_t >= $prog->{et})) {
         if (exists $links{$scrid}) {			# Existing series
           if ($links{$scrid} !~ /$icrid/) {
 	    my ($last_t,$val) = split(';', $links{$scrid});
@@ -102,27 +103,28 @@ sub check_timers {
 sub check_links {
   my $count = 0;
   foreach my $prog (@epg) {
-    my ($sid, $st, $et, $id, $icrid, $scrid) = split(',', $prog);
+    my $scrid = $prog->{scrid};
+    my $icrid = $prog->{icrid};
     next if $scrid eq 'NULL';
     if (exists $links{$scrid}) {
       if ($links{$scrid} !~ /$icrid/) {
 #		Have we already recorded this programme on a diferent series?
+	my $title = get_title($prog->{sid},$prog->{st});
 	my $done = 0;
 	for (values %links) {
 	  if (/$icrid/) {
-            print STDOUT "Item $icrid already recorded!\n";
+            print STDOUT "Item $icrid ($title) already recorded!\n";
 	    $done = 1;
 	  }
 	}
 	if (!$done) {
-	  my $fstart = strftime("%Y-%m-%d:%H%M", localtime($st-$CONFIG{START_PADDING}*60));
-	  my $fend = strftime("%H%M", localtime($et+$CONFIG{STOP_PADDING}*60));
-	  my $title = get_title($sid,$st);
+	  my $fstart = strftime("%Y-%m-%d:%H%M", localtime($prog->{st}-$CONFIG{START_PADDING}*60));
+	  my $fend = strftime("%H%M", localtime($prog->{et}+$CONFIG{STOP_PADDING}*60));
 	  my $flag = 1 + 4*$CONFIG{VPS};
           print STDOUT "New timer set for $scrid, \"$title\" at $fstart\n";
-	  set_timer ("$flag:$sid:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
+	  set_timer ("$flag:$prog->{sid}:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
 	  my ($last_t,$val) = split(';', $links{$scrid});
-          $links{$scrid} = "$st;$val:$icrid";
+          $links{$scrid} = "$prog->{st};$val:$icrid";
 	  $count++;
 	}
       }
@@ -133,44 +135,64 @@ sub check_links {
 
 # Review the timer list for clashes. FIXME: What happens when there are multiple cards?
 
-sub check_timer_clashes
-{
-    my ($ii, $jj);
-    my (@tstart, @tstop);
-    print STDOUT "Checking for timer clashes\n";
-    for ($ii = 0 ; $ii < @timers ; $ii++) {
-      push @tstart, $timers[$ii]->{tstart};
-      push @tstop, $timers[$ii]->{tstop};
+sub check_timer_clashes {
+  my ($ii, $jj);
+  my (@tstart, @tstop);
+  print STDOUT "Checking for timer clashes\n";
+  for ($ii = 0 ; $ii < @timers ; $ii++) {
+    push @tstart, $timers[$ii]->{tstart};
+    push @tstop, $timers[$ii]->{tstop};
 
-      for ($jj = 0 ; $jj < $ii ; $jj++) {
-        if (is_clash($ii, $jj)) {
-	  # What to do?? For now just report the collision
-          my $ttl1 = get_title($chans[$timers[$ii]->{chan}]->{id}, $tstart[$ii]+$CONFIG{START_PADDING}*60);
-          my $ttl2 = get_title($chans[$timers[$jj]->{chan}]->{id}, $tstart[$jj]+$CONFIG{START_PADDING}*60);
-	  my $when = localtime ($timers[$ii]->{tstart});
-          print STDOUT "Collision! $when\n$ttl1 <-> $ttl2\n";
-        }
+    for ($jj = 0 ; $jj < $ii ; $jj++) {
+      if (is_clash($ii, $jj)) {
+ # What to do?? For now just report the collision
+        my $start1 = $tstart[$ii]+$CONFIG{START_PADDING}*60;
+        my $start2 = $tstart[$jj]+$CONFIG{START_PADDING}*60;
+        my $ttl1 = get_title($chans[$timers[$ii]->{chan}]->{id}, $start1);
+        my $ttl2 = get_title($chans[$timers[$jj]->{chan}]->{id}, $start2);
+        my $crid1 = get_crid_for_timer($chans[$timers[$ii]->{chan}]->{id}, $start1);
+        my $crid2 = get_crid_for_timer($chans[$timers[$jj]->{chan}]->{id}, $start2);
+        my $when = localtime ($timers[$ii]->{tstart});
+        print STDOUT "Collision! $when\n$ttl1 ($crid1) <-> $ttl2 ($crid2)\n";
+        list_alternatives($crid1, $ttl1, $start1);
+        list_alternatives($crid2, $ttl2, $start2);
       }
     }
+  }
 
-    sub is_clash {
-      my ($i, $j) = @_;
-      if (($tstart[$i] >= $tstart[$j] && $tstart[$i] < $tstop[$j])
+  sub is_clash {
+    my ($i, $j) = @_;
+    if (($tstart[$i] >= $tstart[$j] && $tstart[$i] < $tstop[$j])
         || ($tstart[$j] >= $tstart[$i] && $tstart[$j] < $tstop[$i])) {
                 # Timers collide in time. Check if the
 		# Timers are on the same transponder
-         my $t1 = $chans[$timers[$i]->{chan}] -> {transponder};
-         my $t2 = $chans[$timers[$j]->{chan}] -> {transponder};
-         if ($t1 eq $t2) {
-#               print STDOUT "Multiple recordings on same transponder - OK\n";
-           return 0;
-         }
-         else {
-	   return 1;
-         }
-      }
-      return 0;
+       my $t1 = $chans[$timers[$i]->{chan}] -> {transponder};
+       my $t2 = $chans[$timers[$j]->{chan}] -> {transponder};
+       if ($t1 eq $t2) {
+#              print STDOUT "Multiple recordings on same transponder - OK\n";
+         return 0;
+       }
+       else {
+         return 1;
+       }
     }
+    return 0;
+  }
+
+  sub list_alternatives {
+    my ($crid, $ttl, $start) = @_;
+
+    if (my @prog = events_for_crid($crid)) {
+      print STDOUT "Alternatives for $ttl:\n";
+      foreach my $evt (@prog) {
+        if ($evt->{st} != $start) {
+          my $w = localtime($evt->{st});
+          my ($c) = channel_name_from_id($evt->{sid}) =~ /(.*?);/;
+          print STDOUT  "\t$c - $w\n";
+        }
+      }
+    }
+  }
 }
 
 # Look for split events (eg a film with a news summary in the middle), and ensure
@@ -188,10 +210,9 @@ sub check_split_recordings {
     my $start_t = $timer->{tstart};
     my $stop_t = $timer->{tstop};
     foreach my $prog (@epg) {
-      my ($sid, $st, $et, $id, $icrid) = split(',', $prog);
-      if (($sid eq $channelid) && ($start_t <= $st) && ($stop_t >= $et)) {
-        if ($icrid =~ /\#/) {
-          push @splits, "$icrid:$st:$channelid";
+      if (($prog->{sid} eq $channelid) && ($start_t <= $prog->{st}) && ($stop_t >= $prog->{et})) {
+        if ($prog->{icrid} =~ /\#/) {
+          push @splits, "$prog->{icrid}:$prog->{st}:$channelid";
         }
       }
     }
@@ -199,23 +220,22 @@ sub check_split_recordings {
   foreach $split (@splits) {
     my ($tcrid, $tstart, $tchan) = split(':', $split);
     foreach my $prog (@epg) {
-      my ($sid, $st, $et, $id, $icrid) = split(',', $prog);
-      if (($icrid eq $tcrid) && ($tchan eq $sid) && ($st != $tstart)) {
+      if (($prog->{icrid} eq $tcrid) && ($tchan eq $prog->{sid}) && ($prog->{st} != $tstart)) {
         my $got = 0;
         foreach $split2 (@splits) {
           my ($tcrid2, $tstart2, $tchan2) = split(':', $split2);
-          if (($icrid eq $tcrid2) && ($tchan2 eq $sid) && ($st == $tstart2)) {
+          if (($prog->{icrid} eq $tcrid2) && ($tchan2 eq $prog->{sid}) && ($prog->{st} == $tstart2)) {
             $got = 1;
           }
         }
         if (!$got) {
           print STDOUT "Unset timer for split event $tcrid found!\n";
-          my $fstart = strftime("%Y-%m-%d:%H%M", localtime($st-$CONFIG{START_PADDING}*60));
-          my $fend = strftime("%H%M", localtime($et+$CONFIG{STOP_PADDING}*60));
-          my $title = get_title($sid,$st);
+          my $fstart = strftime("%Y-%m-%d:%H%M", localtime($prog->{st}-$CONFIG{START_PADDING}*60));
+          my $fend = strftime("%H%M", localtime($prog->{et}+$CONFIG{STOP_PADDING}*60));
+          my $title = get_title($prog->{sid},$prog->{st});
           my $flag = 1 + 4*$CONFIG{VPS};
           print STDOUT "New timer set for \"$title\" at $fstart\n";
-          set_timer ("$flag:$sid:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
+          set_timer ("$flag:$prog->{sid}:$fstart:$fend:$CONFIG{PRIORITY}:$CONFIG{LIFETIME}:$title:");
           $count++;
         }
       }
@@ -240,6 +260,34 @@ sub check_changed_events {
       print STDOUT "Event: $event_title <=> Timer: $timer_title\n";
     }
   }
+}
+
+# Get a list of all occurrences of an event CRID. Return an array of EPG objects.
+
+sub events_for_crid {
+
+  my ($crid) = @_;
+  my @elist;
+
+  foreach my $prog (@epg) {
+    if ($prog->{icrid} eq $crid) {
+      push (@elist, $prog);
+    }
+  }
+  return @elist;
+}
+
+# Get the name of a channel given its ID.
+
+sub channel_name_from_id {
+
+  my ($id) = @_;
+  foreach my $chan (@chans) {
+    if ($chan->{id} eq $id) {
+      return $chan->{name};
+    }
+  }
+  return ('Unknown');
 }
 
 # Read the timers from VDR
@@ -300,7 +348,14 @@ sub get_epg {
     }
     elsif ($type eq 'e') {
       if ($icrid ne "NULL") {
-        push @epg, join(',', $sid, $st, $et, $id, $icrid, $scrid);
+        push (@epg, {
+          sid => $sid,
+          st => $st,
+          et => $et,
+          id => $id,
+          icrid => $icrid,
+          scrid => $scrid
+        });
         $icrid = "NULL";
       }
       $scrid = "NULL";
@@ -412,6 +467,25 @@ sub get_title {
   $title =~ s/:/|/g;
   return ($title);
 }
+
+# Get the item CRID for a timer entry.
+
+sub get_crid_for_timer {
+
+  my $crid = "CRID";
+  my ($chan,$time) = @_;
+  Send ("LSTE $chan at $time");
+  while (<SOCK>) {
+    chomp;
+    if (/^215-Y (.*)/) {
+      $crid = $1;
+    }
+    last if substr($_, 3, 1) ne "-";
+  }
+  $crid =~ s/:/|/g;
+  return ($crid);
+}
+
 
 # Set a new timer
 

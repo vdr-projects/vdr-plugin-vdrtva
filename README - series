@@ -21,5 +21,4 @@ Points to remember:
 
 - If you run this script overnight, a timer set one day which fires on the same day will not create a series link (because the timer no longer exists).
 
-- This script has not been tested with multiple tuner cards or with mixed DVB-T and
-DVB-S setups.
+- This script has not been tested with multiple tuner cards or with mixed DVB-T and DVB-S setups.
