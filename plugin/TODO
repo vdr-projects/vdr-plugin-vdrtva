@@ -1,0 +1,13 @@
+Handle CRID 'suggestions' via new SVDRP command.
+
+Mail a log file after the update.
+ 
+Missing functions from Perl script:
+	Check split recordings
+
+Timer clash check code needs to cope with multiple tuner cards.
+
+Maybe add a timer callback so that a series can be registered immediately
+instead of waiting for an overnight update.
+
+Config file

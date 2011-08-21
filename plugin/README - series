@@ -1,0 +1,48 @@
+This is a very simple script to demonstrate the 'series link' concept. Run it
+every day as a cron job and never miss your favourite series again! Just create
+a timer for the first programme in a series and the script will automatically
+record the rest for you.
+
+Configuration parameters at the start of the file must be set to match your vdr
+settings. The 'padding' values must match those used when you manually set
+timers (eg when using vdradmin).
+
+If you set the 'VPS' config parameter to '1', and also set 'UseVps = 1' and
+'VpsFallack=1' in VDR's setup.conf, new timers will be created to use the EIT
+Running Status to set start and end times. An accurate Running Status is a
+requirement of the Freeview Plus specification. However if the programme starts
+earlier than (scheduled time - VpsMargin) the beginning will be missed.
+
+The script detects split events, eg a film with a news summary in the middle,
+and ensures that if a timer is set for one part, all parts of the programme are
+recorded (as separate timers). The script also checks for timer clashes, though
+it doesn't try to resolve the clash, and also warns if the title of an event in
+the EPG has changed since the timer was set (so perhaps a different programme is
+being broadcast).
+
+The script creates a file "links.data" in the vdr directory when run. This file
+contains series CRIDs of all of the timers which have been set, and the item
+CRIDs of the individual programmes which have had recordings scheduled. A
+timestamp against each entry gives the date of the last timer set, so that old
+series can be automatically purged.
+
+Points to remember:
+
+- Not all channels on UK Freeview have CRIDs in the EPG (at present just the
+  BBC, ITV, C4 and C5 stables plus Sky 3 and Virgin 1). Some radio channels
+  have item CRIDs but none have series CRIDs.
+
+- Different programme providers have different ideas of what constitutes a
+  'series'.
+
+- The timer creation process is very simplistic; it doesn't check for timer
+  clashes, and selects the first physical entry in the EPG (which may not be
+  the prime broadcast of the programme).
+
+- A series link is created for every timer whether you want one or not.
+
+- If you run this script overnight, a timer set one day which fires on the same
+  day will not create a series link (because the timer no longer exists).
+
+- This script has not been tested with multiple tuner cards or with mixed DVB-T
+  and DVB-S setups.

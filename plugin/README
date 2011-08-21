@@ -1,0 +1,81 @@
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2 of the License, or (at your option) any later
+version. See the file COPYING for more information.
+
+Description:
+
+TV-Anytime is the name given to a set of technologies which aim to simplify the
+process of recording and replaying broadcast content. The standards are
+published by ETSI and are available without cost from www.etsi.org.  The main
+standard is ETSI TS 102 323.
+
+In the UK a subset of the TV-Anytime specification is broadcast on the DTV
+service under the trade name "FreeView Plus". This patch is written for the UK
+version but should work with the full specification (untested).
+
+TV-Anytime data is contained in Content Reference Identifiers (CRIDs). The
+syntax of a CRID is described in RFC 4078; it is a URI-compliant string of the
+form:
+
+	crid://<DNS name>/<data>
+
+in which <DNS name> is a registered internet domain name (RFC 1034) and <data>
+is a free-format string. The <DNS Name> section relates to the content provider
+(TV channel or company), and the <data> section to the programme.
+
+CRIDs are transmitted in the EIT as Content Identifier Descriptors, with
+descriptor ID 0x76. To save bandwith only the <data> section is sent, the <DNS
+Name> part is taken from the Default Authority Descriptor in the SDT, and the
+crid:// is assumed.
+
+A programme may have up to two CRIDs in its EPG entry. One identifies the
+specific item of content which is being broadcast, while the other identifies a
+series of programmes which this item belongs to. In FreeView Plus these CRIDs
+have crid_type values 0x31 and 0x32 respectively (TV-Anytime uses values 0x01
+and 0x02).
+
+To give an example, the programme "Torchwood" broadcast on channel BBC2 at 21:00
+on 2008-01-16 had item CRID '54BXLC' and series CRID 'KCJ00C'. When the same
+programme was repeated the following day on channel BBC3, the item CRID remained
+the same but the series CRID was 'KCJ12C'. Meanwhile the episode broadcast on
+BBC2 one week later on 2008-01-24 had CRID '54BXLD' but the same series as the
+previous week. Hence it is possible for a PVR to record an entire series by
+using the series CRID, or to find an alternative broadcast for an individual
+item if there is a clash with another recording.
+
+Operation:
+
+The use of the 'Accurate Recording' feature is described in README-vps.
+
+The plugin runs every 24 hours at a time set by the '-u' parameter (default
+03:00). It captures CRID data for a time (10 minutes) then:
+
+- Checks each series link to see if any new events have been added to the EPG in
+  the same series. If so then timers are added for them.
+
+- Checks for new manually-created timers and adds series links for them.
+
+- Checks for timer clashes and suggests possible alternative recording times.
+
+- Checks that the event being recorded by each timer is the same as when the
+  timer was set (ie that the EPG has not changed in the meantime)
+
+The plugin logs its activity through the VDR syslog.
+
+The plugin has an SVDRP interface which is mainly used for debugging, but could
+be used to interface with other applications. The commands are:
+
+LSTL	Print the series links list
+
+LSTY	Print the CRIDs for each event
+
+LSTZ	Print the Default Authority data for each channel
+
+STOP	Start and stop CRID data capture
+STRT
+
+UPDT	Trigger an update of the series links.
+
+
+This is Alpha-quality code - USE AT YOUR OWN RISK!!
