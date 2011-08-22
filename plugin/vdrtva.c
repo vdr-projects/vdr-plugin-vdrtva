@@ -486,7 +486,10 @@ bool cPluginvdrTva::SaveLinksFile()
       }
       else {
 	isyslog ("vdrtva: Expiring series %s\n", Item->sCRID());
+	cLinkItem *tmp = Links->Prev(Item);
+	if (!tmp) tmp = Links->First();
 	Links->Del(Item);
+	Item = tmp;
       }
     }
     fclose(f);
