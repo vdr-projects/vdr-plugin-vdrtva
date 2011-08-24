@@ -582,11 +582,11 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 		  if (!t) {
 		    Timers.Add(timer);
 		    Timers.SetModified();
-		    isyslog("vdrtva: timer %s added", *timer->ToDescr());
+		    isyslog("vdrtva: timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
 		    AddSeriesLink(scrid, event->StartTime(), icrid);
 		    saveNeeded = true;
 		  }
-		  else isyslog("vdrtva: Duplicate timer creation attempted for %s", *timer->ToDescr());
+		  else isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
 		}
 	      }
 	    }
@@ -614,9 +614,9 @@ void cPluginvdrTva::CheckChangedEvents()
 	const cSchedule *schedule = Schedules->GetSchedule(channel);
 	if (schedule) {
 	  const cEvent *event = schedule->GetEvent(NULL, timer->StartTime());
-	  if (!event) isyslog("Event for timer '%s' seems to no longer exist", timer->File());
+	  if (!event) isyslog("Event for timer '%s' at %s seems to no longer exist", timer->File(), *DayDateTime(timer->StartTime()));
 	  else if (strcmp(timer->File(), event->Title())) {
-	    isyslog("vdrtva: Changed timer event: %s <=> %s", timer->File(), event->Title());
+	    isyslog("vdrtva: Changed timer event at %s: %s <=> %s", *DayDateTime(timer->StartTime()), timer->File(), event->Title());
 	  }
 	}
       }
