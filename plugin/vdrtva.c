@@ -714,25 +714,24 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
       SI::SDT::Service SiSdtService;
       for (SI::Loop::Iterator it; sdt.serviceLoop.getNext(SiSdtService, it); ) {
 	cChannel *chan = Channels.GetByChannelID(tChannelID(Source(),sdt.getOriginalNetworkId(),sdt.getTransportStreamId(),SiSdtService.getServiceId()));
-	if (!chan) {
-	  return;
-	}
-        cChanDA *chanDA = ChanDAs->GetByChannelID(chan->Number());
-        if (!chanDA) {
-          SI::Descriptor *d;
-          for (SI::Loop::Iterator it2; (d = SiSdtService.serviceDescriptors.getNext(it2)); ) {
-            switch (d->getDescriptorTag()) {
-              case SI::DefaultAuthorityDescriptorTag: {
-                 SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
-                 char DaBuf[Utf8BufSize(1024)];
-                 da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
-		 chanDA = ChanDAs->NewChanDA(chan->Number());
-                 chanDA->SetDA(DaBuf);
-              }
-              break;
-             default: ;
-            }
-            delete d;
+	if (chan) {
+	  cChanDA *chanDA = ChanDAs->GetByChannelID(chan->Number());
+	  if (!chanDA) {
+	    SI::Descriptor *d;
+	    for (SI::Loop::Iterator it2; (d = SiSdtService.serviceDescriptors.getNext(it2)); ) {
+	      switch (d->getDescriptorTag()) {
+		case SI::DefaultAuthorityDescriptorTag: {
+		  SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
+		  char DaBuf[Utf8BufSize(1024)];
+		  da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
+		  chanDA = ChanDAs->NewChanDA(chan->Number());
+		  chanDA->SetDA(DaBuf);
+		}
+		break;
+	      default: ;
+	      }
+	      delete d;
+	    }
 	  }
         }
       }
