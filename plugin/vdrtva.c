@@ -21,27 +21,30 @@ cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.0.4";
+static const char *VERSION        = "0.0.5";
 static const char *DESCRIPTION    = "TV-Anytime plugin";
 static const char *MAINMENUENTRY  = "vdrTva";
+
+int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
+int lifetime;			// Lifetime of series link recordings (default 99)
+int priority;			// Priority of series link recordings (default 99)
+int seriesLifetime;		// Expiry time of a series link (default 30 days)
+int updatehours;		// Time to carry out the series link update (default 03:00)
+int updatemins;
+
 
 class cPluginvdrTva : public cPlugin {
 private:
   // Add any member variables or functions you may need here.
   int length;
   int size;
-  int seriesLifetime;
-  int priority;
-  int lifetime;
   int flags;
-  int collectionperiod;
   int state;
   time_t nextactiontime;
-  int updatehours;
-  int updatemins;
   char *buffer;
   char* configDir;
   cTvaFilter *Filter;
+  cTvaStatusMonitor *statusMonitor;
   bool Append(const char *Fmt, ...);
   bool AppendItems(const char* Option);
   const char* Reply();
@@ -105,6 +108,7 @@ cPluginvdrTva::cPluginvdrTva(void)
 cPluginvdrTva::~cPluginvdrTva()
 {
   // Clean up after yourself!
+  delete statusMonitor;
 }
 
 const char *cPluginvdrTva::CommandLineHelp(void)
@@ -169,7 +173,7 @@ bool cPluginvdrTva::Start(void)
   // Start any background activities the plugin shall perform.
   configDir = strcpyrealloc(configDir, cPlugin::ConfigDirectory("vdrtva"));
   LoadLinksFile();
-
+  statusMonitor = new cTvaStatusMonitor;
   struct tm tm_r;
   char buff[32];
   time_t now = time(NULL);
@@ -197,6 +201,7 @@ void cPluginvdrTva::Housekeeping(void)
 {
   // Perform any cleanup or other regular tasks.
   if (nextactiontime < time(NULL)) {
+    statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
     switch (state) {
       case 0:
 	StartDataCapture();
@@ -217,6 +222,11 @@ void cPluginvdrTva::Housekeeping(void)
 	state = 0;
 	break;
     }
+  }
+  else if (EventCRIDs && statusMonitor->GetTimerAddedDelta() > 60) {
+    Update();
+    Check();
+    statusMonitor->ClearTimerAdded();
   }
 }
 
@@ -247,13 +257,18 @@ cOsdObject *cPluginvdrTva::MainMenuAction(void)
 cMenuSetupPage *cPluginvdrTva::SetupMenu(void)
 {
   // Return a setup menu in case the plugin supports one.
-  return NULL;
+  return new cTvaMenuSetup;
 }
 
 bool cPluginvdrTva::SetupParse(const char *Name, const char *Value)
 {
   // Parse your own setup parameters and store their values.
-  return false;
+  if      (!strcasecmp(Name, "CollectionPeriod")) collectionperiod = atoi(Value);
+  else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value);
+  else if (!strcasecmp(Name, "TimerLifetime")) lifetime = atoi(Value);
+  else if (!strcasecmp(Name, "TimerPriority")) priority = atoi(Value);
+  else return false;
+  return true;
 }
 
 bool cPluginvdrTva::Service(const char *Id, void *Data)
@@ -681,6 +696,63 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   }
   if (!found) isyslog("vdrtva: No alternatives for '%s':", event->Title());
 }
+
+
+/*
+	cTvaStatusMonitor - callback for timer changes.
+*/
+
+cTvaStatusMonitor::cTvaStatusMonitor(void)
+{
+  timeradded = NULL;
+}
+
+void cTvaStatusMonitor::TimerChange(const cTimer *Timer, eTimerChange Change)
+{
+  if (Change == tcAdd) timeradded = time(NULL);
+}
+
+int cTvaStatusMonitor::GetTimerAddedDelta(void)
+{
+  if (timeradded) {
+    return (time(NULL) - timeradded);
+  }
+  return 0;
+}
+
+void cTvaStatusMonitor::ClearTimerAdded(void)
+{
+  timeradded = NULL;
+  return;
+}
+
+
+/*
+	cTvaMenuSetup - setup menu function.
+*/
+
+cTvaMenuSetup::cTvaMenuSetup(void)
+{
+  newcollectionperiod = collectionperiod;
+  newlifetime = lifetime;
+  newpriority = priority;
+  newseriesLifetime = seriesLifetime;
+  newupdatehours = updatehours;
+  newupdatemins = updatemins;
+  Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod));
+  Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime));
+  Add(new cMenuEditIntItem(tr("New timer lifetime"), &newlifetime));
+  Add(new cMenuEditIntItem(tr("New timer priority"), &newpriority));
+}
+
+void cTvaMenuSetup::Store(void)
+{
+  SetupStore("CollectionPeriod", newcollectionperiod);
+  SetupStore("SeriesLifetime", newseriesLifetime);
+  SetupStore("TimerLifetime", newlifetime);
+  SetupStore("TimerPriority", newpriority);
+}
+
 
 
 /*

@@ -1,5 +1,6 @@
 #include <vdr/filter.h>
 #include <vdr/device.h>
+#include <vdr/status.h>
 
 class cTvaFilter : public cFilter {
 private:
@@ -10,6 +11,38 @@ protected:
 public:
   cTvaFilter(void);
 }; 
+
+class cTvaStatusMonitor : public cStatus {
+  private:
+    time_t timeradded;
+  protected:
+    virtual void TimerChange(const cTimer *Timer, eTimerChange Change);
+               // Indicates a change in the timer settings.
+               // If Change is tcAdd or tcDel, Timer points to the timer that has
+               // been added or will be deleted, respectively. In case of tcMod,
+               // Timer is NULL; this indicates that some timer has been changed.
+               // Note that tcAdd and tcDel are always also followed by a tcMod.
+  public:
+    cTvaStatusMonitor(void);
+    int GetTimerAddedDelta(void);
+    void ClearTimerAdded(void);
+};
+
+
+class cTvaMenuSetup : public cMenuSetupPage {
+private:
+  int newcollectionperiod;
+  int newlifetime;
+  int newpriority;
+  int newseriesLifetime;
+  int newupdatehours;
+  int newupdatemins;
+protected:
+  virtual void Store(void);
+public:
+  cTvaMenuSetup(void);
+};
+
 
 class cChanDA : public cListObject {
   private:

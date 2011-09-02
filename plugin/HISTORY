@@ -19,3 +19,8 @@ VDR Plugin 'vdrtva' Revision History
 - Major functions of Perl script built into plugin.
 - Auto-execution of series link updates.
 - Simplified internal data structures.
+
+2011-09-02: Version 0.0.5
+
+- Added check for series links whenever a new timer is added.
+- Added setup menu (not fully tested).
