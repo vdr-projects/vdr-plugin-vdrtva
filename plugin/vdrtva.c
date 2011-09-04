@@ -579,7 +579,7 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 	      if (schedule) {
 		const cEvent *event = schedule->GetEvent(eventCRID->Eid());
 		struct tm tm_r;
-		char startbuff[64], endbuff[64];
+		char startbuff[64], endbuff[64], etitle[256];
 		time_t starttime = event->StartTime();
 		time_t endtime = event->EndTime();
 		if (!Setup.UseVps) {
@@ -590,7 +590,9 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 		strftime(startbuff, sizeof(startbuff), "%Y-%m-%d:%H%M", &tm_r);
 		localtime_r(&endtime, &tm_r);
 		strftime(endbuff, sizeof(endbuff), "%H%M", &tm_r);
-		cString timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, event->Title());
+		strn0cpy (etitle, event->Title(), sizeof(etitle));
+		strreplace(etitle, ':', '|');
+		cString timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, etitle);
 		cTimer *timer = new cTimer;
 		if (timer->Parse(timercmd)) {
 		  cTimer *t = Timers.GetTimer(timer);
