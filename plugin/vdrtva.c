@@ -21,7 +21,7 @@ cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.0.5";
+static const char *VERSION        = "0.0.6";
 static const char *DESCRIPTION    = "TV-Anytime plugin";
 static const char *MAINMENUENTRY  = "vdrTva";
 
@@ -29,8 +29,8 @@ int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
 int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
-int updatehours;		// Time to carry out the series link update (default 03:00)
-int updatemins;
+int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
+
 
 
 class cPluginvdrTva : public cPlugin {
@@ -101,8 +101,7 @@ cPluginvdrTva::cPluginvdrTva(void)
   flags = 5;
   state = 0;
   collectionperiod = 10 * 60;
-  updatehours = 3;
-  updatemins = 0;
+  updatetime = 300;
 }
 
 cPluginvdrTva::~cPluginvdrTva()
@@ -152,8 +151,7 @@ bool cPluginvdrTva::ProcessArgs(int argc, char *argv[])
 	strncpy(buf, optarg,sizeof(buf));
 	hours = strtok_r(buf, ":", &strtok_next);
 	mins = strtok_r(NULL, "!", &strtok_next);
-	updatehours = atoi(hours);
-	updatemins = atoi(mins);
+	updatetime = atoi(hours)*100 + atoi(mins);
 	break;
       default:
 	return false;
@@ -179,8 +177,8 @@ bool cPluginvdrTva::Start(void)
   time_t now = time(NULL);
   localtime_r(&now, &tm_r);
   tm_r.tm_sec = 0;
-  tm_r.tm_hour = updatehours;
-  tm_r.tm_min = updatemins;
+  tm_r.tm_hour = updatetime / 100;
+  tm_r.tm_min = updatetime % 100;
   nextactiontime = mktime(&tm_r);
   if (nextactiontime < now) nextactiontime += SECONDSPERDAY;
   ctime_r(&nextactiontime, buff);
@@ -224,7 +222,7 @@ void cPluginvdrTva::Housekeeping(void)
     }
   }
   else if (EventCRIDs && statusMonitor->GetTimerAddedDelta() > 60) {
-    Update();
+    Update();			// Wait 1 minute for VDR to enter the event data into the new timer.
     Check();
     statusMonitor->ClearTimerAdded();
   }
@@ -267,6 +265,7 @@ bool cPluginvdrTva::SetupParse(const char *Name, const char *Value)
   else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value);
   else if (!strcasecmp(Name, "TimerLifetime")) lifetime = atoi(Value);
   else if (!strcasecmp(Name, "TimerPriority")) priority = atoi(Value);
+  else if (!strcasecmp(Name, "UpdateTime")) updatetime = atoi(Value);
   else return false;
   return true;
 }
@@ -426,10 +425,9 @@ void cPluginvdrTva::StopDataCapture()
 
 void cPluginvdrTva::Update()
 {
-  if(
-    UpdateLinksFromTimers() ||
-    AddNewEventsToSeries()
-  ) SaveLinksFile();
+  bool status = UpdateLinksFromTimers();
+  status |= AddNewEventsToSeries();
+  if(status) SaveLinksFile();
   isyslog("vdrtva: Updates complete");
 }
 
@@ -641,6 +639,9 @@ void cPluginvdrTva::CheckChangedEvents()
   }
 }
 
+// Check for timer clashes - overlapping timers which are not on the same transponder.
+// FIXME How to deal with multiple input devices??
+
 void cPluginvdrTva::CheckTimerClashes(void)
 {
   if (Timers.Count() < 2) return;
@@ -739,12 +740,12 @@ cTvaMenuSetup::cTvaMenuSetup(void)
   newlifetime = lifetime;
   newpriority = priority;
   newseriesLifetime = seriesLifetime;
-  newupdatehours = updatehours;
-  newupdatemins = updatemins;
+  newupdatetime = updatetime;
   Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod));
   Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime));
   Add(new cMenuEditIntItem(tr("New timer lifetime"), &newlifetime));
   Add(new cMenuEditIntItem(tr("New timer priority"), &newpriority));
+  Add(new cMenuEditIntItem(tr("Update Time (HHMM)"), &newupdatetime));
 }
 
 void cTvaMenuSetup::Store(void)
@@ -753,6 +754,7 @@ void cTvaMenuSetup::Store(void)
   SetupStore("SeriesLifetime", newseriesLifetime);
   SetupStore("TimerLifetime", newlifetime);
   SetupStore("TimerPriority", newpriority);
+  SetupStore("UpdateTime", newupdatetime);
 }
 
 

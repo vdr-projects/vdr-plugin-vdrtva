@@ -11,7 +11,7 @@ published by ETSI and are available without cost from www.etsi.org.  The main
 standard is ETSI TS 102 323.
 
 In the UK a subset of the TV-Anytime specification is broadcast on the DTV
-service under the trade name "FreeView Plus". This patch is written for the UK
+service under the trade name "FreeView Plus". This plugin is written for the UK
 version but should work with the full specification (untested).
 
 TV-Anytime data is contained in Content Reference Identifiers (CRIDs). The
@@ -51,10 +51,10 @@ The use of the 'Accurate Recording' feature is described in README-vps.
 The plugin runs every 24 hours at a time set by the '-u' parameter (default
 03:00). It captures CRID data for a time (10 minutes) then:
 
+- Checks for new manually-created timers and adds series links for them.
+
 - Checks each series link to see if any new events have been added to the EPG in
   the same series. If so then timers are added for them.
-
-- Checks for new manually-created timers and adds series links for them.
 
 - Checks for timer clashes and suggests possible alternative recording times.
 
@@ -77,5 +77,23 @@ STRT
 
 UPDT	Trigger an update of the series links.
 
+Points to remember:
 
-This is Alpha-quality code - USE AT YOUR OWN RISK!!
+- Not all channels on UK Freeview have CRIDs in the EPG Some radio channels
+  have item CRIDs but none have series CRIDs.
+
+- Different programme providers have different ideas of what constitutes a
+  'series'.
+
+- The timer creation process is very simplistic; it doesn't check for timer
+  clashes, and selects the first physical entry in the EPG (which may not be
+  the prime broadcast of the programme).
+
+- A series link is created for every timer whether you want one or not.
+
+- This script has not been tested with multiple tuner cards or with mixed DVB-T
+  and DVB-S setups.
+
+
+Although I use this software on my VDR installation, this is Alpha-quality code 
+- USE AT YOUR OWN RISK!!
