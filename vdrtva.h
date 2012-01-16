@@ -35,8 +35,7 @@ private:
   int newlifetime;
   int newpriority;
   int newseriesLifetime;
-  int newupdatehours;
-  int newupdatemins;
+  int newupdatetime;
 protected:
   virtual void Store(void);
 public:
@@ -99,6 +98,33 @@ class cEventCRIDs : public cRwLock, public cConfig<cEventCRID> {
     void SetMaxNumber(int number) { maxNumber = number; }
     cEventCRID *GetByID(int Cid, tEventID Eid);
     cEventCRID *NewEventCRID(int Cid, tEventID Eid);
+};
+
+
+class cSuggestCRID : public cListObject {
+  private:
+    char *iCrid;
+    char *gCrid;
+    int cid;
+  public:
+    cSuggestCRID(void);
+    ~cSuggestCRID(void);
+    char * iCRID(void) { return iCrid; }
+    char * gCRID(void) { return gCrid; }
+    int Cid(void) { return cid; }
+    void Set(int Cid, char *iCRID, char *gCRID);
+};
+
+
+class cSuggestCRIDs : public cRwLock, public cConfig<cSuggestCRID> {
+  private:
+    int maxNumber;
+  public:
+    cSuggestCRIDs(void);
+    ~cSuggestCRIDs(void);
+    int MaxNumber(void) { return maxNumber; }
+    void SetMaxNumber(int number) { maxNumber = number; }
+    cSuggestCRID *NewSuggestCRID(int Cid, char *icrid, char *gcrid);
 };
 
 

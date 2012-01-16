@@ -12,7 +12,7 @@ longer work.
 To use VPS for accurate recording, some conditions must be met:
 
 - VDR must be compiled with the 'VPS Fallback' patch (included with this
-  plugin). Note that some Linux distributions (esp. Mandriva) include this
+  plugin). Note that some Linux distributions (eg. Mandriva) include this
   patch in their binaries. 
 - Parameters 'UseVps' and 'VpsFallback' in setup.conf must both be set to 1
 - Timers must have the 'use VPS' flag set
@@ -28,6 +28,8 @@ With these conditions met, the sequence of events is:
 - When the running status changes to 'running', VDR starts recording
 - When the running status changes to 'not running', VDR stops recording and
   deletes the timer.
+- If the programme has not started by the time it was scheduled to finish,
+  monitoring is stopped and the timer is deleted.
 
 CAUTION - VPS recordings seem to have a lower priority than live viewing. VDR
 will not interrupt live viewing to start looking for the start of a recording.

@@ -25,7 +25,12 @@ VDR Plugin 'vdrtva' Revision History
 - Added check for series links whenever a new timer is added.
 - Added setup menu (not fully tested).
 
-2012-01-05 Version 0.0.6
+2012-01-05: Version 0.0.6
 - Configuration of update time changed.
 - Fixed bug in processing of updates.
 - Patch version is now deprecated.
+
+2012-01-15: Version 0.0.7
+- Added collection of 'Suggested' CRIDs and SVDRP command to display them.
+- Added notification of split events.
+- Fixed (again) expiration of links.

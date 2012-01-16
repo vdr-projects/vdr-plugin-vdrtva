@@ -29,11 +29,12 @@ descriptor ID 0x76. To save bandwith only the <data> section is sent, the <DNS
 Name> part is taken from the Default Authority Descriptor in the SDT, and the
 crid:// is assumed.
 
-A programme may have up to two CRIDs in its EPG entry. One identifies the
-specific item of content which is being broadcast, while the other identifies a
-series of programmes which this item belongs to. In FreeView Plus these CRIDs
-have crid_type values 0x31 and 0x32 respectively (TV-Anytime uses values 0x01
-and 0x02).
+A programme may have up to three CRIDs in its EPG entry. One identifies the
+specific item of content which is being broadcast, while another identifies a
+series of programmes which this item belongs to. The third type includes the
+CRIDs of 'suggested' events which the viewer might be interested in. In FreeView
+Plus these CRIDs have crid_type values 0x31 0x32 and 0x33 respectively
+(TV-Anytime uses values 0x01 - 0x03).
 
 To give an example, the programme "Torchwood" broadcast on channel BBC2 at 21:00
 on 2008-01-16 had item CRID '54BXLC' and series CRID 'KCJ00C'. When the same
@@ -61,12 +62,18 @@ The plugin runs every 24 hours at a time set by the '-u' parameter (default
 - Checks that the event being recorded by each timer is the same as when the
   timer was set (ie that the EPG has not changed in the meantime)
 
+- Flags any split events (eg a long programme with a news sumary in the middle).
+  At present a manual check is needed that all perts of the programme are set to
+  be recorded.
+
 The plugin logs its activity through the VDR syslog.
 
 The plugin has an SVDRP interface which is mainly used for debugging, but could
 be used to interface with other applications. The commands are:
 
 LSTL	Print the series links list
+
+LSTS	Print the 'suggested' events list
 
 LSTY	Print the CRIDs for each event
 
@@ -79,7 +86,7 @@ UPDT	Trigger an update of the series links.
 
 Points to remember:
 
-- Not all channels on UK Freeview have CRIDs in the EPG Some radio channels
+- Not all channels on UK Freeview have CRIDs in the EPG. Some radio channels
   have item CRIDs but none have series CRIDs.
 
 - Different programme providers have different ideas of what constitutes a
@@ -91,9 +98,11 @@ Points to remember:
 
 - A series link is created for every timer whether you want one or not.
 
-- This script has not been tested with multiple tuner cards or with mixed DVB-T
+- This plugin has not been tested with multiple tuner cards or with mixed DVB-T
   and DVB-S setups.
 
+- The 'suggested' events list may contain duplicates and may have CRIDs which
+  do not appear in the events list.
 
 Although I use this software on my VDR installation, this is Alpha-quality code 
 - USE AT YOUR OWN RISK!!

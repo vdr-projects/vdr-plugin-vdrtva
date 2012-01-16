@@ -19,6 +19,7 @@
 
 cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
+cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
 static const char *VERSION        = "0.0.6";
@@ -53,6 +54,7 @@ private:
   bool SaveLinksFile(void);
   bool UpdateLinksFromTimers(void);
   bool AddNewEventsToSeries(void);
+  bool CheckSplitTimers(void);
   void CheckChangedEvents(void);
   void CheckTimerClashes(void);
   void FindAlternatives(const cEvent *event);
@@ -94,6 +96,7 @@ cPluginvdrTva::cPluginvdrTva(void)
   Filter = NULL;
   ChanDAs = NULL;
   EventCRIDs = NULL;
+  SuggestCRIDs = NULL;
   Links = NULL;
   seriesLifetime = 30 * SECONDSPERDAY;
   priority = 99;
@@ -282,6 +285,8 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
    static const char *HelpPages[] = {
     "LSTL\n"
     "    Print the Links list.",
+    "LSTS\n"
+    "    Print the suggested events list",
     "LSTY\n"
     "    Print the Event list including CRIDs.",
     "LSTZ\n"
@@ -310,6 +315,21 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     }
     if (buffer && length > 0) return cString(Reply(), true);
     else return cString::sprintf("Nothing in the buffer!");
+  }
+  else if (strcasecmp(Command, "LSTS") == 0) {
+    if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {
+       ReplyCode = 250;
+       for (cSuggestCRID *suggestCRID = SuggestCRIDs->First(); suggestCRID; suggestCRID = SuggestCRIDs->Next(suggestCRID)) {
+	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggestCRID->Cid());
+	  if(chanDA) {
+	    Append("%s%s %s%s\n", chanDA->DA(), suggestCRID->iCRID(), chanDA->DA(), suggestCRID->gCRID());
+	  }
+	}
+	if (buffer && length > 0) return cString(Reply(), true);
+	else return cString::sprintf("Nothing in the buffer!");
+    }
+    else
+       return cString::sprintf("No suggested events defined");
   }
   else if (strcasecmp(Command, "LSTY") == 0) {
     if (EventCRIDs && (EventCRIDs->MaxNumber() >= 1)) {
@@ -406,7 +426,9 @@ void cPluginvdrTva::StartDataCapture()
   if (!Filter) {
     if (EventCRIDs) delete EventCRIDs;
     if (ChanDAs) delete ChanDAs;
+    if (SuggestCRIDs) delete SuggestCRIDs;
     EventCRIDs = new cEventCRIDs();
+    SuggestCRIDs = new cSuggestCRIDs;
     ChanDAs = new cChanDAs();
     Filter = new cTvaFilter();
     cDevice::ActualDevice()->AttachFilter(Filter);
@@ -435,6 +457,7 @@ void cPluginvdrTva::Check()
 {
   CheckChangedEvents();
   CheckTimerClashes();
+  CheckSplitTimers();
   isyslog("vdrtva: Checks complete");
 }
 
@@ -493,17 +516,17 @@ bool cPluginvdrTva::SaveLinksFile()
   cString oldlinks = AddDirectory(configDir, "links.old");
   FILE *f = fopen(newlinks, "w");
   if (f) {
-    for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
+    cLinkItem *Item = Links->First();
+    while (Item) {
+      cLinkItem *next = Links->Next(Item);
       if ((Item->ModTime() + seriesLifetime) > time(NULL)) {
 	fprintf(f, "%s,%d;%s\n", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
       }
       else {
 	isyslog ("vdrtva: Expiring series %s\n", Item->sCRID());
-	cLinkItem *tmp = Links->Prev(Item);
-	if (!tmp) tmp = Links->First();
 	Links->Del(Item);
-	Item = tmp;
       }
+      Item = next;
     }
     fclose(f);
     unlink (oldlinks);		// Allow to fail if the save file does not exist
@@ -700,6 +723,34 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   if (!found) isyslog("vdrtva: No alternatives for '%s':", event->Title());
 }
 
+// Check that, if any split events (eg a long programme with a news break in the middle)
+// are being recorded, that timers are set for all of the parts.
+// FIXME This may not work if the programme is being repeated. Inefficient algorithm.
+
+bool cPluginvdrTva::CheckSplitTimers(void)
+{
+  if (Timers.Count() == 0) return false;
+  for (int i = 0; i < Timers.Count(); i++) {
+    cTimer *timer = Timers.Get(i);
+    if (timer) {
+      const cEvent *event = timer->Event();
+      if (event) {
+	cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+	cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
+	cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+	if (eventcrid && chanda && strchr(eventcrid->iCRID(), '#')) {
+//	  char crid[Utf8BufSize(256)], *next;
+//	  strcpy(crid, eventcrid->iCRID());
+//	  char *prefix = strtok_r(crid, "#", &next);
+//	  char *suffix = strtok_r(NULL, "#", &next);
+	  isyslog("Timer for split event '%s' found - check all parts are being recorded!", event->Title());
+	}
+      }
+    }
+  }
+  return false;
+}
+
 
 /*
 	cTvaStatusMonitor - callback for timer changes.
@@ -830,7 +881,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
           cEventCRID *eventCRID = EventCRIDs->GetByID(chan->Number(), SiEitEvent.getEventId());
           if (!eventCRID) {
             SI::Descriptor *d;
-            char iCRIDBuf[Utf8BufSize(1024)] = {'\0'}, sCRIDBuf[Utf8BufSize(1024)] = {'\0'};
+            char iCRIDBuf[Utf8BufSize(256)] = {'\0'}, sCRIDBuf[Utf8BufSize(256)] = {'\0'}, gCRIDBuf[Utf8BufSize(256)] = {'\0'};
             for (SI::Loop::Iterator it2; (d = SiEitEvent.eventDescriptors.getNext(it2)); ) {
               switch (d->getDescriptorTag()) {
                 case SI::ContentIdentifierDescriptorTag: {
@@ -839,16 +890,21 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
                   for (SI::Loop::Iterator ite; (cd->identifierLoop.getNext(cde,ite)); ) {
                     if (cde.getCridLocation() == 0) {
 		      switch (cde.getCridType()) {
-		        case 0x01:	// ETSI 102 363 code
+		        case 0x01:	// ETSI 102 323 code
 		        case 0x31:	// UK Freeview private code
 			  cde.identifier.getText(iCRIDBuf, sizeof(iCRIDBuf));
 			  break;
-		        case 0x02:	// ETSI 102 363 code
+		        case 0x02:	// ETSI 102 323 code
 		        case 0x32:	// UK Freeview private code
 			  cde.identifier.getText(sCRIDBuf, sizeof(sCRIDBuf));
+			  break;
 			// ETSI 102 323 defines CRID type 0x03, which describes 'related' or 'suggested' events.
 			// Freeview broadcasts these as CRID type 0x33.
 			// There can be more than one type 0x33 descriptor per event (each with one CRID).
+			case 0x03:
+			case 0x33:
+			  cde.identifier.getText(gCRIDBuf, sizeof(gCRIDBuf));		// FIXME Rashly assuming that a 0x31 CRID will always precede a 0x33 CRID.
+			  if (iCRIDBuf[0]) SuggestCRIDs->NewSuggestCRID(chan->Number(), iCRIDBuf, gCRIDBuf);
 		      }
                     }
                     else {
@@ -996,6 +1052,51 @@ cEventCRID *cEventCRIDs::NewEventCRID(int Cid, tEventID Eid)
   EventCRIDHash.Add(NewEventCRID, Eid + Cid*33000);
   EventCRIDs->SetMaxNumber(EventCRIDs->MaxNumber()+1);
   return NewEventCRID;
+}
+
+
+/*
+  cSuggestCRID - CRIDs of suggested items for an event.
+*/
+
+cSuggestCRID::cSuggestCRID(void)
+{
+  iCrid = gCrid = NULL;
+}
+
+cSuggestCRID::~cSuggestCRID(void)
+{
+  free (iCrid);
+  free (gCrid);
+}
+
+void cSuggestCRID::Set(int Cid, char *iCRID, char *gCRID) {
+  iCrid = strcpyrealloc(iCrid, iCRID);
+  gCrid = strcpyrealloc(gCrid, gCRID);
+  cid = Cid;
+}
+
+
+/*
+  cSuggestCRIDs - in-memory list of suggested events
+*/
+
+cSuggestCRIDs::cSuggestCRIDs(void)
+{
+  maxNumber = 0;
+}
+
+cSuggestCRIDs::~cSuggestCRIDs(void)
+{
+}
+
+cSuggestCRID *cSuggestCRIDs::NewSuggestCRID(int cid, char *icrid, char *gcrid)
+{
+  cSuggestCRID *NewSuggestCRID = new cSuggestCRID;
+  NewSuggestCRID->Set(cid, icrid, gcrid);
+  Add(NewSuggestCRID);
+  SuggestCRIDs->SetMaxNumber(SuggestCRIDs->MaxNumber()+1);
+  return NewSuggestCRID;
 }
 
 
