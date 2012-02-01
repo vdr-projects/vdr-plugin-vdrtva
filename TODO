@@ -4,10 +4,10 @@ Check split recordings should create timers if necessary.
 
 Timer clash check code needs to cope with multiple tuner cards.
 
-Test GUI configuration and Config file.
+I18n (for OSD).
 
 Some events have a series CRID but no item CRID - how to handle these?
 
 Bugs:
-	'Suggestions' list contains duplicates.
-	Rare crash 'pure virtual method called' in plugin. 
+	'Suggestions' list in memory contains duplicates (removed by SVDRP output).
+	Very rare crash 'pure virtual method called' in plugin. 

@@ -22,9 +22,9 @@ cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.0.6";
+static const char *VERSION        = "0.1.0";
 static const char *DESCRIPTION    = "TV-Anytime plugin";
-static const char *MAINMENUENTRY  = "vdrTva";
+//static const char *MAINMENUENTRY  = "vdrTva";
 
 int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
 int lifetime;			// Lifetime of series link recordings (default 99)
@@ -62,7 +62,7 @@ private:
   void StopDataCapture(void);
   void Update(void);
   void Check(void);
-//  void Reset();
+
 public:
   cPluginvdrTva(void);
   virtual ~cPluginvdrTva();
@@ -77,8 +77,6 @@ public:
   virtual void MainThreadHook(void);
   virtual cString Active(void);
   virtual time_t WakeupTime(void);
-  virtual const char *MainMenuEntry(void) { return MAINMENUENTRY; }
-  virtual cOsdObject *MainMenuAction(void);
   virtual cMenuSetupPage *SetupMenu(void);
   virtual bool SetupParse(const char *Name, const char *Value);
   virtual bool Service(const char *Id, void *Data = NULL);
@@ -249,12 +247,6 @@ time_t cPluginvdrTva::WakeupTime(void)
   return 0;
 }
 
-cOsdObject *cPluginvdrTva::MainMenuAction(void)
-{
-  // Perform the action when selected from the main VDR menu.
-  return NULL;
-}
-
 cMenuSetupPage *cPluginvdrTva::SetupMenu(void)
 {
   // Return a setup menu in case the plugin supports one.
@@ -264,8 +256,8 @@ cMenuSetupPage *cPluginvdrTva::SetupMenu(void)
 bool cPluginvdrTva::SetupParse(const char *Name, const char *Value)
 {
   // Parse your own setup parameters and store their values.
-  if      (!strcasecmp(Name, "CollectionPeriod")) collectionperiod = atoi(Value);
-  else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value);
+  if      (!strcasecmp(Name, "CollectionPeriod")) collectionperiod = atoi(Value) * 60;
+  else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value) * SECONDSPERDAY;
   else if (!strcasecmp(Name, "TimerLifetime")) lifetime = atoi(Value);
   else if (!strcasecmp(Name, "TimerPriority")) priority = atoi(Value);
   else if (!strcasecmp(Name, "UpdateTime")) updatetime = atoi(Value);
@@ -318,18 +310,22 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   }
   else if (strcasecmp(Command, "LSTS") == 0) {
     if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {
-       ReplyCode = 250;
-       for (cSuggestCRID *suggestCRID = SuggestCRIDs->First(); suggestCRID; suggestCRID = SuggestCRIDs->Next(suggestCRID)) {
+      SuggestCRIDs->Sort();
+      ReplyCode = 250;
+      for (cSuggestCRID *suggestCRID = SuggestCRIDs->First(); suggestCRID; suggestCRID = SuggestCRIDs->Next(suggestCRID)) {
+//	  if (strcmp(SuggestCRIDs->Next(suggestCRID)->iCRID(), suggestCRID->iCRID()) ||
+//	      strcmp(SuggestCRIDs->Next(suggestCRID)->gCRID(), suggestCRID->gCRID())) {
 	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggestCRID->Cid());
 	  if(chanDA) {
 	    Append("%s%s %s%s\n", chanDA->DA(), suggestCRID->iCRID(), chanDA->DA(), suggestCRID->gCRID());
 	  }
-	}
-	if (buffer && length > 0) return cString(Reply(), true);
-	else return cString::sprintf("Nothing in the buffer!");
+//	  }
+      }
+      if (buffer && length > 0) return cString(Reply(), true);
+      else return cString::sprintf("Nothing in the buffer!");
     }
     else
-       return cString::sprintf("No suggested events defined");
+      return cString::sprintf("No suggested events defined");
   }
   else if (strcasecmp(Command, "LSTY") == 0) {
     if (EventCRIDs && (EventCRIDs->MaxNumber() >= 1)) {
@@ -787,25 +783,25 @@ void cTvaStatusMonitor::ClearTimerAdded(void)
 
 cTvaMenuSetup::cTvaMenuSetup(void)
 {
-  newcollectionperiod = collectionperiod;
+  newcollectionperiod = collectionperiod / 60;
   newlifetime = lifetime;
   newpriority = priority;
-  newseriesLifetime = seriesLifetime;
+  newseriesLifetime = seriesLifetime / SECONDSPERDAY;
   newupdatetime = updatetime;
-  Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod));
-  Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime));
-  Add(new cMenuEditIntItem(tr("New timer lifetime"), &newlifetime));
-  Add(new cMenuEditIntItem(tr("New timer priority"), &newpriority));
-  Add(new cMenuEditIntItem(tr("Update Time (HHMM)"), &newupdatetime));
+  Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod, 1, 99));
+  Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime, 1, 366));
+  Add(new cMenuEditIntItem(tr("New timer lifetime"), &newlifetime, 0, 99));
+  Add(new cMenuEditIntItem(tr("New timer priority"), &newpriority, 0, 99));
+  Add(new cMenuEditTimeItem(tr("Update Time (HH:MM)"), &newupdatetime));
 }
 
 void cTvaMenuSetup::Store(void)
 {
-  SetupStore("CollectionPeriod", newcollectionperiod);
-  SetupStore("SeriesLifetime", newseriesLifetime);
-  SetupStore("TimerLifetime", newlifetime);
-  SetupStore("TimerPriority", newpriority);
-  SetupStore("UpdateTime", newupdatetime);
+  SetupStore("CollectionPeriod", newcollectionperiod); collectionperiod = newcollectionperiod * 60;
+  SetupStore("SeriesLifetime", newseriesLifetime); seriesLifetime = newseriesLifetime * SECONDSPERDAY;
+  SetupStore("TimerLifetime", newlifetime); lifetime = newlifetime;
+  SetupStore("TimerPriority", newpriority); priority = newpriority;
+  SetupStore("UpdateTime", newupdatetime); updatetime = newupdatetime;
 }
 
 
@@ -1074,6 +1070,15 @@ void cSuggestCRID::Set(int Cid, char *iCRID, char *gCRID) {
   iCrid = strcpyrealloc(iCrid, iCRID);
   gCrid = strcpyrealloc(gCrid, gCRID);
   cid = Cid;
+}
+
+int cSuggestCRID::Compare(const cListObject &ListObject) const
+{
+  cSuggestCRID *s = (cSuggestCRID *) &ListObject;
+  if (int r = cid - s->Cid()) return r;
+  if (int r = strcmp(iCrid, s->iCRID())) return r;
+  if (int r = strcmp(gCrid, s->gCRID())) return r;
+  return 0;
 }
 
 

@@ -49,8 +49,8 @@ Operation:
 
 The use of the 'Accurate Recording' feature is described in README-vps.
 
-The plugin runs every 24 hours at a time set by the '-u' parameter (default
-03:00). It captures CRID data for a time (10 minutes) then:
+The plugin runs every 24 hours at a time set by the '-u' parameter or in VDR's
+OSD (default 03:00). It captures CRID data for a time (default 10 minutes) then:
 
 - Checks for new manually-created timers and adds series links for them.
 
@@ -63,7 +63,7 @@ The plugin runs every 24 hours at a time set by the '-u' parameter (default
   timer was set (ie that the EPG has not changed in the meantime)
 
 - Flags any split events (eg a long programme with a news sumary in the middle).
-  At present a manual check is needed that all perts of the programme are set to
+  At present a manual check is needed that all parts of the programme are set to
   be recorded.
 
 The plugin logs its activity through the VDR syslog.
@@ -101,8 +101,8 @@ Points to remember:
 - This plugin has not been tested with multiple tuner cards or with mixed DVB-T
   and DVB-S setups.
 
-- The 'suggested' events list may contain duplicates and may have CRIDs which
-  do not appear in the events list.
+- The 'suggested' events list may have CRIDs which do not appear in the events
+  list.
 
-Although I use this software on my VDR installation, this is Alpha-quality code 
+Although I use this software on my VDR installation, this is Beta-quality code 
 - USE AT YOUR OWN RISK!!

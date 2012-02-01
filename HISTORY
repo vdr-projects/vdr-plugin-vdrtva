@@ -2,26 +2,21 @@ VDR Plugin 'vdrtva' Revision History
 -------------------------------------
 
 2007-10-07: Version 0.0.1
-
 - Initial experimental plugin.
 
 2011-06-18: Version 0.0.2
-
 - First functional proof-of-concept.
 
 2011-07-17: Version 0.0.3
-
 - Handling of Links file moved from Perl script into plugin.
 - Implemented config settings.
 
 2011-08-18: Version 0.0.4
-
 - Major functions of Perl script built into plugin.
 - Auto-execution of series link updates.
 - Simplified internal data structures.
 
 2011-09-02: Version 0.0.5
-
 - Added check for series links whenever a new timer is added.
 - Added setup menu (not fully tested).
 
@@ -34,3 +29,7 @@ VDR Plugin 'vdrtva' Revision History
 - Added collection of 'Suggested' CRIDs and SVDRP command to display them.
 - Added notification of split events.
 - Fixed (again) expiration of links.
+
+2012-02-01: Version 0.1.0
+- Fixed OSD setup menu.
+- Removed duplicates from 'suggestions' report.
