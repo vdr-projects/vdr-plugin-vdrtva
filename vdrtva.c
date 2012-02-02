@@ -39,7 +39,6 @@ private:
   // Add any member variables or functions you may need here.
   int length;
   int size;
-  int flags;
   int state;
   time_t nextactiontime;
   char *buffer;
@@ -99,7 +98,6 @@ cPluginvdrTva::cPluginvdrTva(void)
   seriesLifetime = 30 * SECONDSPERDAY;
   priority = 99;
   lifetime = 99;
-  flags = 5;
   state = 0;
   collectionperiod = 10 * 60;
   updatetime = 300;
@@ -312,14 +310,16 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {
       SuggestCRIDs->Sort();
       ReplyCode = 250;
-      for (cSuggestCRID *suggestCRID = SuggestCRIDs->First(); suggestCRID; suggestCRID = SuggestCRIDs->Next(suggestCRID)) {
-//	  if (strcmp(SuggestCRIDs->Next(suggestCRID)->iCRID(), suggestCRID->iCRID()) ||
-//	      strcmp(SuggestCRIDs->Next(suggestCRID)->gCRID(), suggestCRID->gCRID())) {
-	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggestCRID->Cid());
+      cSuggestCRID *suggest = SuggestCRIDs->First();
+      while (suggest) {
+	cSuggestCRID *next = SuggestCRIDs->Next(suggest);
+	  if (!next || strcmp(next->iCRID(), suggest->iCRID()) || strcmp(next->gCRID(), suggest->gCRID())) {
+	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
 	  if(chanDA) {
-	    Append("%s%s %s%s\n", chanDA->DA(), suggestCRID->iCRID(), chanDA->DA(), suggestCRID->gCRID());
+	    Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
 	  }
-//	  }
+	}
+	suggest = next;
       }
       if (buffer && length > 0) return cString(Reply(), true);
       else return cString::sprintf("Nothing in the buffer!");
@@ -597,12 +597,15 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 		const cEvent *event = schedule->GetEvent(eventCRID->Eid());
 		struct tm tm_r;
 		char startbuff[64], endbuff[64], etitle[256];
+		int flags;
 		time_t starttime = event->StartTime();
 		time_t endtime = event->EndTime();
 		if (!Setup.UseVps) {
 		  starttime -= Setup.MarginStart;
 		  endtime += Setup.MarginStop;
+		  flags = 1;
 		}
+		else flags = 5;
 		localtime_r(&starttime, &tm_r);
 		strftime(startbuff, sizeof(startbuff), "%Y-%m-%d:%H%M", &tm_r);
 		localtime_r(&endtime, &tm_r);
