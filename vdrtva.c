@@ -601,8 +601,8 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 		time_t starttime = event->StartTime();
 		time_t endtime = event->EndTime();
 		if (!Setup.UseVps) {
-		  starttime -= Setup.MarginStart;
-		  endtime += Setup.MarginStop;
+		  starttime -= Setup.MarginStart * 60;
+		  endtime += Setup.MarginStop * 60;
 		  flags = 1;
 		}
 		else flags = 5;
@@ -688,6 +688,8 @@ void cPluginvdrTva::CheckTimerClashes(void)
     }
   }
 }
+
+// Find alternative broadcasts for an event, ie events in the EIT having the same CRID.
 
 void cPluginvdrTva::FindAlternatives(const cEvent *event)
 {
