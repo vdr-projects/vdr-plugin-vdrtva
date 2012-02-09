@@ -104,5 +104,8 @@ Points to remember:
 - The 'suggested' events list may have CRIDs which do not appear in the events
   list.
 
+The plugin is compatible with VDR version >= 1.7.19. The patch version will work 
+with VDR 1.6.
+
 Although I use this software on my VDR installation, this is Beta-quality code 
 - USE AT YOUR OWN RISK!!

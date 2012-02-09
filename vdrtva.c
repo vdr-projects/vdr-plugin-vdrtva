@@ -54,6 +54,7 @@ private:
   bool UpdateLinksFromTimers(void);
   bool AddNewEventsToSeries(void);
   bool CheckSplitTimers(void);
+  bool CreateTimerFromEvent(const cEvent *event);
   void CheckChangedEvents(void);
   void CheckTimerClashes(void);
   void FindAlternatives(const cEvent *event);
@@ -370,14 +371,20 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
       return cString::sprintf("Data capture stopped");
     }
     else {
-       ReplyCode = 999;
+      ReplyCode = 999;
       return cString::sprintf("Double stop attempted");
     }
   }
   else if (strcasecmp(Command, "UPDT") == 0) {
-    Update();
-    Check();
-    return cString::sprintf("Update completed");
+    if (EventCRIDs) {
+      Update();
+      Check();
+      return cString::sprintf("Update completed");
+    }
+    else {
+      ReplyCode = 999;
+      return cString::sprintf("Update attempted before data capture");
+    }
   }
   return NULL;
 }
@@ -563,8 +570,6 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
 }
 
 // Find new events for series links and create timers for them.
-// It would be simpler to create the timer directly from the event, but it would not then be possible to 
-// control the VPS parameters.
 
 bool cPluginvdrTva::AddNewEventsToSeries()
 {
@@ -595,35 +600,9 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 	      const cSchedule *schedule = Schedules->GetSchedule(channel);
 	      if (schedule) {
 		const cEvent *event = schedule->GetEvent(eventCRID->Eid());
-		struct tm tm_r;
-		char startbuff[64], endbuff[64], etitle[256];
-		int flags;
-		time_t starttime = event->StartTime();
-		time_t endtime = event->EndTime();
-		if (!Setup.UseVps) {
-		  starttime -= Setup.MarginStart * 60;
-		  endtime += Setup.MarginStop * 60;
-		  flags = 1;
-		}
-		else flags = 5;
-		localtime_r(&starttime, &tm_r);
-		strftime(startbuff, sizeof(startbuff), "%Y-%m-%d:%H%M", &tm_r);
-		localtime_r(&endtime, &tm_r);
-		strftime(endbuff, sizeof(endbuff), "%H%M", &tm_r);
-		strn0cpy (etitle, event->Title(), sizeof(etitle));
-		strreplace(etitle, ':', '|');
-		cString timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, etitle);
-		cTimer *timer = new cTimer;
-		if (timer->Parse(timercmd)) {
-		  cTimer *t = Timers.GetTimer(timer);
-		  if (!t) {
-		    Timers.Add(timer);
-		    Timers.SetModified();
-		    isyslog("vdrtva: timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
-		    AddSeriesLink(scrid, event->StartTime(), icrid);
-		    saveNeeded = true;
-		  }
-		  else isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
+		if (CreateTimerFromEvent(event)) {
+		  AddSeriesLink(scrid, event->StartTime(), icrid);
+		  saveNeeded = true;
 		}
 	      }
 	    }
@@ -690,15 +669,21 @@ void cPluginvdrTva::CheckTimerClashes(void)
 }
 
 // Find alternative broadcasts for an event, ie events in the EIT having the same CRID.
+// Check whether adding a timer for the alternative would create a clash with any other timer.
 
 void cPluginvdrTva::FindAlternatives(const cEvent *event)
 {
-  if (!event) return;
+  if (!event) {
+    dsyslog("vdrtva: FindAlternatives() called without Event!");
+    return;
+  }
   cChannel *channel = Channels.GetByChannelID(event->ChannelID());
   cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
   cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
-  if (!eventcrid || !chanda) return;
-
+  if (!eventcrid || !chanda) {
+    isyslog("vdrtva: Cannot find alternatives for '%s'", event->Title());
+    return;
+  }
   bool found = false;
   for (cEventCRID *eventcrid2 = EventCRIDs->First(); eventcrid2; eventcrid2 = EventCRIDs->Next(eventcrid2)) {
     if ((strcmp(eventcrid->iCRID(), eventcrid2->iCRID()) == 0) && (event->EventID() != eventcrid2->Eid())) {
@@ -715,13 +700,29 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
 	      isyslog("vdrtva: Alternatives for '%s':", event->Title());
 	      found = true;
 	    }
-	    isyslog("vdrtva: %s %s", channel2->Name(), *DayDateTime(event2->StartTime())); 
+	    bool clash = false;
+	    for (int i = 1; i < Timers.Count(); i++) {
+	      cTimer *timer = Timers.Get(i);
+	      if (timer) {
+		if((timer->StartTime() >= event2->StartTime() && timer->StartTime() < event2->EndTime())
+		  ||(event2->StartTime() >= timer->StartTime() && event2->StartTime() < timer->StopTime())) {
+		  cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
+		  if (timer->Channel()->Transponder() != channel->Transponder()) {
+		    isyslog("vdrtva: %s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), timer->File());
+		    clash = true;
+		  }
+		}
+	      }
+	    }
+	    if (!clash) {
+	      isyslog("vdrtva: %s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
+	    }
 	  }
 	}
       }
     }
   }
-  if (!found) isyslog("vdrtva: No alternatives for '%s':", event->Title());
+  if (!found) isyslog("vdrtva: No alternatives for '%s'", event->Title());
 }
 
 // Check that, if any split events (eg a long programme with a news break in the middle)
@@ -752,6 +753,41 @@ bool cPluginvdrTva::CheckSplitTimers(void)
   return false;
 }
 
+// Create a timer from an event, setting VPS parameter explicitly.
+
+bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
+  struct tm tm_r;
+  char startbuff[64], endbuff[64], etitle[256];
+  int flags;
+  cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+  time_t starttime = event->StartTime();
+  time_t endtime = event->EndTime();
+  if (!Setup.UseVps) {
+    starttime -= Setup.MarginStart * 60;
+    endtime += Setup.MarginStop * 60;
+    flags = 1;
+  }
+  else flags = 5;
+  localtime_r(&starttime, &tm_r);
+  strftime(startbuff, sizeof(startbuff), "%Y-%m-%d:%H%M", &tm_r);
+  localtime_r(&endtime, &tm_r);
+  strftime(endbuff, sizeof(endbuff), "%H%M", &tm_r);
+  strn0cpy (etitle, event->Title(), sizeof(etitle));
+  strreplace(etitle, ':', '|');
+  cString timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, etitle);
+  cTimer *timer = new cTimer;
+  if (timer->Parse(timercmd)) {
+    cTimer *t = Timers.GetTimer(timer);
+    if (!t) {
+      Timers.Add(timer);
+      Timers.SetModified();
+      isyslog("vdrtva: timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
+      return true;
+    }
+    isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
+  }
+  return false;
+}
 
 /*
 	cTvaStatusMonitor - callback for timer changes.

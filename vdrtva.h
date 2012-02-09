@@ -113,6 +113,7 @@ class cSuggestCRID : public cListObject {
     char * gCRID(void) { return gCrid; }
     int Cid(void) { return cid; }
     void Set(int Cid, char *iCRID, char *gCRID);
+    virtual int Compare(const cListObject &ListObject) const;
 };
 
 
