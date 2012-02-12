@@ -15,7 +15,6 @@
 #include "vdrtva.h"
 
 #define SVDRPOSD_BUFSIZE KILOBYTE(4)
-#define SECONDSPERDAY (86400)
 
 cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
@@ -37,17 +36,12 @@ int updatetime;			// Time to carry out the series link update HHMM (default 03:0
 class cPluginvdrTva : public cPlugin {
 private:
   // Add any member variables or functions you may need here.
-  int length;
-  int size;
   int state;
   time_t nextactiontime;
-  char *buffer;
   char* configDir;
   cTvaFilter *Filter;
   cTvaStatusMonitor *statusMonitor;
-  bool Append(const char *Fmt, ...);
   bool AppendItems(const char* Option);
-  const char* Reply();
   bool AddSeriesLink(const char *scrid, int modtime, const char *icrid);
   void LoadLinksFile(void);
   bool SaveLinksFile(void);
@@ -89,14 +83,13 @@ cPluginvdrTva::cPluginvdrTva(void)
   // Initialize any member variables here.
   // DON'T DO ANYTHING ELSE THAT MAY HAVE SIDE EFFECTS, REQUIRE GLOBAL
   // VDR OBJECTS TO EXIST OR PRODUCE ANY OUTPUT!
-  buffer = NULL;
   configDir = NULL;
   Filter = NULL;
   ChanDAs = NULL;
   EventCRIDs = NULL;
   SuggestCRIDs = NULL;
   Links = NULL;
-  seriesLifetime = 30 * SECONDSPERDAY;
+  seriesLifetime = 30 * SECSINDAY;
   priority = 99;
   lifetime = 99;
   state = 0;
@@ -145,7 +138,7 @@ bool cPluginvdrTva::ProcessArgs(int argc, char *argv[])
 	break;
       case 's':
 	opt = atoi(optarg);
-	if (opt > 0) seriesLifetime = opt * SECONDSPERDAY;
+	if (opt > 0) seriesLifetime = opt * SECSINDAY;
 	break;
       case 'u':
 	strncpy(buf, optarg,sizeof(buf));
@@ -180,7 +173,7 @@ bool cPluginvdrTva::Start(void)
   tm_r.tm_hour = updatetime / 100;
   tm_r.tm_min = updatetime % 100;
   nextactiontime = mktime(&tm_r);
-  if (nextactiontime < now) nextactiontime += SECONDSPERDAY;
+  if (nextactiontime < now) nextactiontime += SECSINDAY;
   ctime_r(&nextactiontime, buff);
   isyslog("vdrtva: next update due at %s", buff);
   return true;
@@ -216,7 +209,7 @@ void cPluginvdrTva::Housekeeping(void)
 	break;
       case 3:
 	Check();
-	nextactiontime += (SECONDSPERDAY - collectionperiod);
+	nextactiontime += (SECSINDAY - collectionperiod);
 	state = 0;
 	break;
     }
@@ -256,7 +249,7 @@ bool cPluginvdrTva::SetupParse(const char *Name, const char *Value)
 {
   // Parse your own setup parameters and store their values.
   if      (!strcasecmp(Name, "CollectionPeriod")) collectionperiod = atoi(Value) * 60;
-  else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value) * SECONDSPERDAY;
+  else if (!strcasecmp(Name, "SeriesLifetime")) seriesLifetime = atoi(Value) * SECSINDAY;
   else if (!strcasecmp(Name, "TimerLifetime")) lifetime = atoi(Value);
   else if (!strcasecmp(Name, "TimerPriority")) priority = atoi(Value);
   else if (!strcasecmp(Name, "UpdateTime")) updatetime = atoi(Value);
@@ -296,15 +289,16 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
 cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int &ReplyCode)
 {
   // Process SVDRP commands this plugin implements
+  cTvaLog log;
   isyslog ("vdrtva: processing command %s", Command);
   if (strcasecmp(Command, "LSTL") == 0) {
     if (Links && (Links->MaxNumber() >=1)) {
       ReplyCode = 250;
       for (cLinkItem *linkItem = Links->First(); linkItem; linkItem = Links->Next(linkItem)) {
-	Append("%s,%d;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs());
+	log.Append("%s,%d;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs());
       }
     }
-    if (buffer && length > 0) return cString(Reply(), true);
+    if (log.Length() > 0) return cString(log.Buffer());
     else return cString::sprintf("Nothing in the buffer!");
   }
   else if (strcasecmp(Command, "LSTS") == 0) {
@@ -317,12 +311,12 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
 	  if (!next || strcmp(next->iCRID(), suggest->iCRID()) || strcmp(next->gCRID(), suggest->gCRID())) {
 	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
 	  if(chanDA) {
-	    Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
+	    log.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
 	  }
 	}
 	suggest = next;
       }
-      if (buffer && length > 0) return cString(Reply(), true);
+      if (log.Length() > 0) return cString(log.Buffer());
       else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -334,10 +328,10 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
        for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
 	  cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
 	  if(chanDA) {
-            Append("%d %d %s%s %s%s\n", chanDA->Cid(), eventCRID->Eid(), chanDA->DA(), eventCRID->iCRID(), chanDA->DA(), eventCRID->sCRID());
+            log.Append("%d %d %s%s %s%s\n", chanDA->Cid(), eventCRID->Eid(), chanDA->DA(), eventCRID->iCRID(), chanDA->DA(), eventCRID->sCRID());
 	  }
 	}
-	if (buffer && length > 0) return cString(Reply(), true);
+	if (log.Length() > 0) return cString(log.Buffer());
 	else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -347,9 +341,9 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     if (ChanDAs && (ChanDAs->MaxNumber() >= 1)) {
        ReplyCode = 250;
        for (cChanDA *chanDA = ChanDAs->First(); chanDA; chanDA = ChanDAs->Next(chanDA)) {
-          Append("%d %s\n", chanDA->Cid(), chanDA->DA());
+          log.Append("%d %s\n", chanDA->Cid(), chanDA->DA());
        }
-	if (buffer && length > 0) return cString(Reply(), true);
+	if (log.Length() > 0) return cString(log.Buffer());
 	else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -387,41 +381,6 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     }
   }
   return NULL;
-}
-
-bool cPluginvdrTva::Append(const char *Fmt, ...)
-{
-  va_list ap;
-
-  if (!buffer) {
-	  length = 0;
-	  size = SVDRPOSD_BUFSIZE;
-	  buffer = (char *) malloc(sizeof(char) * size);
-  }
-  while (buffer) {
-	  va_start(ap, Fmt);
-	  int n = vsnprintf(buffer + length, size - length, Fmt, ap);
-	  va_end(ap);
-
-	  if (n < size - length) {
-		  length += n;
-		  return true;
-	  }
-	  // overflow: realloc and try again
-	  size += SVDRPOSD_BUFSIZE;
-	  char *tmp = (char *) realloc(buffer, sizeof(char) * size);
-	  if (!tmp)
-		  free(buffer);
-	  buffer = tmp;
-  }
-  return false;
-}
-
-const char* cPluginvdrTva::Reply()
-{
-  char *tmp = buffer;
-  buffer = NULL;
-  return tmp;
 }
 
 void cPluginvdrTva::StartDataCapture()
@@ -827,7 +786,7 @@ cTvaMenuSetup::cTvaMenuSetup(void)
   newcollectionperiod = collectionperiod / 60;
   newlifetime = lifetime;
   newpriority = priority;
-  newseriesLifetime = seriesLifetime / SECONDSPERDAY;
+  newseriesLifetime = seriesLifetime / SECSINDAY;
   newupdatetime = updatetime;
   Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod, 1, 99));
   Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime, 1, 366));
@@ -839,13 +798,57 @@ cTvaMenuSetup::cTvaMenuSetup(void)
 void cTvaMenuSetup::Store(void)
 {
   SetupStore("CollectionPeriod", newcollectionperiod); collectionperiod = newcollectionperiod * 60;
-  SetupStore("SeriesLifetime", newseriesLifetime); seriesLifetime = newseriesLifetime * SECONDSPERDAY;
+  SetupStore("SeriesLifetime", newseriesLifetime); seriesLifetime = newseriesLifetime * SECSINDAY;
   SetupStore("TimerLifetime", newlifetime); lifetime = newlifetime;
   SetupStore("TimerPriority", newpriority); priority = newpriority;
   SetupStore("UpdateTime", newupdatetime); updatetime = newupdatetime;
 }
 
 
+/*
+	cTvaLog - logging class
+*/
+
+cTvaLog::cTvaLog(void) {
+  buffer= NULL;
+}
+
+cTvaLog::~cTvaLog(void) {
+  if (buffer) free(buffer);
+}
+
+bool cTvaLog::Append(const char *Fmt, ...)
+{
+  va_list ap;
+
+  if (!buffer) {
+	  length = 0;
+	  size = SVDRPOSD_BUFSIZE;
+	  buffer = (char *) malloc(sizeof(char) * size);
+  }
+  while (buffer) {
+	  va_start(ap, Fmt);
+	  int n = vsnprintf(buffer + length, size - length, Fmt, ap);
+	  va_end(ap);
+
+	  if (n < size - length) {
+		  length += n;
+		  return true;
+	  }
+	  // overflow: realloc and try again
+	  size *= 2;
+	  char *tmp = (char *) realloc(buffer, sizeof(char) * size);
+	  if (!tmp)
+		  free(buffer);
+	  buffer = tmp;
+  }
+  return false;
+}
+
+int cTvaLog::Length(void) {
+  if (!buffer) return 0;
+  return length;
+}
 
 /*
 	cTvaFilter - capture the CRID data from EIT.

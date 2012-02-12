@@ -43,6 +43,20 @@ public:
 };
 
 
+class cTvaLog {
+  private:
+    char *buffer;
+    int length;
+    int size;
+  public:
+    cTvaLog(void);
+    ~cTvaLog(void);
+    bool Append(const char *Fmt, ...);
+    const char* Buffer() { return buffer; }
+    int Length(void);
+};
+
+
 class cChanDA : public cListObject {
   private:
     int cid;
