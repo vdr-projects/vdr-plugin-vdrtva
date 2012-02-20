@@ -11,17 +11,18 @@
 #include <libsi/descriptor.h>
 #include <stdarg.h>
 #include <getopt.h>
-
+#include <pwd.h>
 #include "vdrtva.h"
 
-#define SVDRPOSD_BUFSIZE KILOBYTE(4)
+#define REPORT(a...) void( (tvalog.mailFrom()) ? tvalog.Append(a) : tvasyslog(a) )
+
 
 cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.1.0";
+static const char *VERSION        = "0.1.1";
 static const char *DESCRIPTION    = "TV-Anytime plugin";
 //static const char *MAINMENUENTRY  = "vdrTva";
 
@@ -30,7 +31,7 @@ int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
-
+cTvaLog tvalog;
 
 
 class cPluginvdrTva : public cPlugin {
@@ -56,6 +57,7 @@ private:
   void StopDataCapture(void);
   void Update(void);
   void Check(void);
+  void tvasyslog(const char *Fmt, ...);
 
 public:
   cPluginvdrTva(void);
@@ -107,6 +109,7 @@ const char *cPluginvdrTva::CommandLineHelp(void)
 {
   // Return a string that describes all known command line options.
   return "  -l n     --lifetime=n       Lifetime of new timers (default 99)\n"
+	 "  -m addr  --mailaddr=addr    Address to send mail report\n"
 	 "  -p n     --priority=n       Priority of new timers (default 99)\n"
 	 "  -s n     --serieslifetime=n Days to remember a series after the last event (default 30)\n"
 	 "  -u HH:MM --updatetime=HH:MM Time to update series links (default 03:00)\n";
@@ -120,17 +123,21 @@ bool cPluginvdrTva::ProcessArgs(int argc, char *argv[])
        { "priority",       required_argument, NULL, 'p' },
        { "lifetime",       required_argument, NULL, 'l' },
        { "updatetime",     required_argument, NULL, 'u' },
+       { "mailaddr",	   required_argument, NULL, 'm' },
        { NULL }
      };
 
   int c, opt;
   char *hours, *mins, *strtok_next;
   char buf[32];
-  while ((c = getopt_long(argc, argv, "l:p:s:u:", long_options, NULL)) != -1) {
+  while ((c = getopt_long(argc, argv, "l:m:p:s:u:", long_options, NULL)) != -1) {
     switch (c) {
       case 'l':
 	opt = atoi(optarg);
 	if (opt > 0) lifetime = opt;
+	break;
+      case 'm':
+	tvalog.setmailTo(optarg);
 	break;
       case 'p':
 	opt = atoi(optarg);
@@ -165,6 +172,33 @@ bool cPluginvdrTva::Start(void)
   configDir = strcpyrealloc(configDir, cPlugin::ConfigDirectory("vdrtva"));
   LoadLinksFile();
   statusMonitor = new cTvaStatusMonitor;
+  if (tvalog.mailTo()) {
+    struct stat sb;
+    if (stat("/usr/sbin/sendmail", &sb) == 0) {
+      char hostname[256];
+      if (!gethostname (hostname, sizeof(hostname))) {
+	char buf[16384];
+	struct passwd pwd, *result;
+	size_t bufsize = sizeof(buf);
+	int s = getpwuid_r (getuid(), &pwd, buf, bufsize, &result);
+	if ((s == 0) && (result != NULL)) {
+	  char from[256];
+	  sprintf(from, "%s@%s", pwd.pw_name, hostname);
+	  tvalog.setmailFrom(from);
+	  isyslog("vdrtva: daily reports will be mailed from %s to %s", from, tvalog.mailTo());
+	}
+	else {
+	  esyslog("vdrtva: unable to establish vdr's user name");
+	}
+      }
+      else {
+	esyslog("vdrtva: unable to establish vdr's hostname");
+      }
+    }
+    else {
+      esyslog("vdrtva: no mail server found");
+    }
+  }
   struct tm tm_r;
   char buff[32];
   time_t now = time(NULL);
@@ -175,7 +209,7 @@ bool cPluginvdrTva::Start(void)
   nextactiontime = mktime(&tm_r);
   if (nextactiontime < now) nextactiontime += SECSINDAY;
   ctime_r(&nextactiontime, buff);
-  isyslog("vdrtva: next update due at %s", buff);
+  REPORT("Vdrtva initialised, next update due at %s", buff);
   return true;
 }
 
@@ -186,6 +220,7 @@ void cPluginvdrTva::Stop(void)
     delete Filter;
     Filter = NULL;
   }
+  tvalog.MailLog();
 }
 
 void cPluginvdrTva::Housekeeping(void)
@@ -211,6 +246,7 @@ void cPluginvdrTva::Housekeeping(void)
 	Check();
 	nextactiontime += (SECSINDAY - collectionperiod);
 	state = 0;
+	tvalog.MailLog();
 	break;
     }
   }
@@ -267,6 +303,8 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
 {
   // Return help text for SVDRP commands this plugin implements
    static const char *HelpPages[] = {
+    "LLOG\n"
+    "    Print the action log.",
     "LSTL\n"
     "    Print the Links list.",
     "LSTS\n"
@@ -289,16 +327,21 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
 cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int &ReplyCode)
 {
   // Process SVDRP commands this plugin implements
-  cTvaLog log;
+  cTvaLog reply;
   isyslog ("vdrtva: processing command %s", Command);
-  if (strcasecmp(Command, "LSTL") == 0) {
+  if (strcasecmp(Command, "LLOG") == 0) {
+    ReplyCode = 250;
+    if (tvalog.Length() > 0) return cString(tvalog.Buffer());
+    else return cString::sprintf("Nothing in the buffer!");
+  }
+  else if (strcasecmp(Command, "LSTL") == 0) {
     if (Links && (Links->MaxNumber() >=1)) {
       ReplyCode = 250;
       for (cLinkItem *linkItem = Links->First(); linkItem; linkItem = Links->Next(linkItem)) {
-	log.Append("%s,%d;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs());
+	reply.Append("%s,%d;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs());
       }
     }
-    if (log.Length() > 0) return cString(log.Buffer());
+    if (reply.Length() > 0) return cString(reply.Buffer());
     else return cString::sprintf("Nothing in the buffer!");
   }
   else if (strcasecmp(Command, "LSTS") == 0) {
@@ -311,12 +354,12 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
 	  if (!next || strcmp(next->iCRID(), suggest->iCRID()) || strcmp(next->gCRID(), suggest->gCRID())) {
 	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
 	  if(chanDA) {
-	    log.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
+	    reply.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
 	  }
 	}
 	suggest = next;
       }
-      if (log.Length() > 0) return cString(log.Buffer());
+      if (reply.Length() > 0) return cString(reply.Buffer());
       else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -328,10 +371,10 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
        for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
 	  cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
 	  if(chanDA) {
-            log.Append("%d %d %s%s %s%s\n", chanDA->Cid(), eventCRID->Eid(), chanDA->DA(), eventCRID->iCRID(), chanDA->DA(), eventCRID->sCRID());
+            reply.Append("%d %d %s%s %s%s\n", chanDA->Cid(), eventCRID->Eid(), chanDA->DA(), eventCRID->iCRID(), chanDA->DA(), eventCRID->sCRID());
 	  }
 	}
-	if (log.Length() > 0) return cString(log.Buffer());
+	if (reply.Length() > 0) return cString(reply.Buffer());
 	else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -341,9 +384,9 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     if (ChanDAs && (ChanDAs->MaxNumber() >= 1)) {
        ReplyCode = 250;
        for (cChanDA *chanDA = ChanDAs->First(); chanDA; chanDA = ChanDAs->Next(chanDA)) {
-          log.Append("%d %s\n", chanDA->Cid(), chanDA->DA());
+          reply.Append("%d %s\n", chanDA->Cid(), chanDA->DA());
        }
-	if (log.Length() > 0) return cString(log.Buffer());
+	if (reply.Length() > 0) return cString(reply.Buffer());
 	else return cString::sprintf("Nothing in the buffer!");
     }
     else
@@ -435,7 +478,7 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *ic
 	  cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
 	  modtime = max(Item->ModTime(), modtime);
 	  Item->Set(Item->sCRID(), modtime, icrids);
-	  isyslog("vdrtva: Adding new event %s to series %s\n", icrid, scrid);
+	  REPORT("Adding new event %s to series %s\n", icrid, scrid);
 	  return true;
 	}
 	return false;
@@ -443,7 +486,7 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *ic
     }
   }
   Links->NewLinkItem(scrid, modtime, icrid);
-  isyslog("vdrtva: Creating new series %s for event %s\n", scrid, icrid);
+  REPORT("Creating new series %s for event %s\n", scrid, icrid);
   return true;
 }
 
@@ -468,7 +511,7 @@ void cPluginvdrTva::LoadLinksFile()
     fclose (f);
     isyslog("vdrtva: loaded %d series links\n", Links->MaxNumber());
   }
-  else isyslog("vdrtva: series links file not found\n");
+  else esyslog("vdrtva: series links file not found\n");
 }
   
 bool cPluginvdrTva::SaveLinksFile()
@@ -589,9 +632,9 @@ void cPluginvdrTva::CheckChangedEvents()
 	const cSchedule *schedule = Schedules->GetSchedule(channel);
 	if (schedule) {
 	  const cEvent *event = schedule->GetEvent(NULL, timer->StartTime());
-	  if (!event) isyslog("Event for timer '%s' at %s seems to no longer exist", timer->File(), *DayDateTime(timer->StartTime()));
+	  if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", timer->File(), *DayDateTime(timer->StartTime()));
 	  else if (strcmp(timer->File(), event->Title())) {
-	    isyslog("vdrtva: Changed timer event at %s: %s <=> %s", *DayDateTime(timer->StartTime()), timer->File(), event->Title());
+	    REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(timer->StartTime()), timer->File(), event->Title());
 	  }
 	}
       }
@@ -616,7 +659,7 @@ void cPluginvdrTva::CheckTimerClashes(void)
 	    const cChannel *channel1 = timer1->Channel();
 	    const cChannel *channel2 = timer2->Channel();
 	    if (channel1->Transponder() != channel2->Transponder()) {
-	      isyslog("vdrtva: Collision at %s. %s <=> %s", *DayDateTime(timer1->StartTime()), timer1->File(), timer2->File());
+	      REPORT("Timer collision at %s. %s <=> %s", *DayDateTime(timer1->StartTime()), timer1->File(), timer2->File());
 	      FindAlternatives(timer1->Event());
 	      FindAlternatives(timer2->Event());
 	    }
@@ -656,7 +699,7 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
 	  if (schedule) {
 	    const cEvent *event2 = schedule->GetEvent(eventcrid2->Eid(), 0);
 	    if (!found) {
-	      isyslog("vdrtva: Alternatives for '%s':", event->Title());
+	      REPORT("Alternatives for '%s':", event->Title());
 	      found = true;
 	    }
 	    bool clash = false;
@@ -667,21 +710,21 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
 		  ||(event2->StartTime() >= timer->StartTime() && event2->StartTime() < timer->StopTime())) {
 		  cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
 		  if (timer->Channel()->Transponder() != channel->Transponder()) {
-		    isyslog("vdrtva: %s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), timer->File());
+		    REPORT("%s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), timer->File());
 		    clash = true;
 		  }
 		}
 	      }
 	    }
 	    if (!clash) {
-	      isyslog("vdrtva: %s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
+	      REPORT("%s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
 	    }
 	  }
 	}
       }
     }
   }
-  if (!found) isyslog("vdrtva: No alternatives for '%s'", event->Title());
+  if (!found) REPORT("No alternatives for '%s'", event->Title());
 }
 
 // Check that, if any split events (eg a long programme with a news break in the middle)
@@ -704,7 +747,7 @@ bool cPluginvdrTva::CheckSplitTimers(void)
 //	  strcpy(crid, eventcrid->iCRID());
 //	  char *prefix = strtok_r(crid, "#", &next);
 //	  char *suffix = strtok_r(NULL, "#", &next);
-	  isyslog("Timer for split event '%s' found - check all parts are being recorded!", event->Title());
+	  REPORT("Timer for split event '%s' found - check all parts are being recorded!", event->Title());
 	}
       }
     }
@@ -740,13 +783,28 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
     if (!t) {
       Timers.Add(timer);
       Timers.SetModified();
-      isyslog("vdrtva: timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
+      REPORT("timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
       return true;
     }
     isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
   }
   return false;
 }
+
+//	Report actions to syslog if we don't want an email.
+
+void tvasyslog(const char *Fmt, ...) {
+  
+  va_list ap;
+  char buff[4096];
+
+  va_start(ap, Fmt);
+  vsnprintf(buff, sizeof(buff), Fmt, ap);
+  va_end(ap);
+  isyslog("vdrtva: %s", buff);
+}
+
+
 
 /*
 	cTvaStatusMonitor - callback for timer changes.
@@ -755,11 +813,15 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
 cTvaStatusMonitor::cTvaStatusMonitor(void)
 {
   timeradded = NULL;
+  lasttimer = NULL;
 }
 
 void cTvaStatusMonitor::TimerChange(const cTimer *Timer, eTimerChange Change)
 {
-  if (Change == tcAdd) timeradded = time(NULL);
+  if (Change == tcAdd) {
+    timeradded = time(NULL);
+    lasttimer = Timer;
+  }
 }
 
 int cTvaStatusMonitor::GetTimerAddedDelta(void)
@@ -810,45 +872,84 @@ void cTvaMenuSetup::Store(void)
 */
 
 cTvaLog::cTvaLog(void) {
-  buffer= NULL;
+  buffer = mailfrom = mailto = NULL;
 }
 
 cTvaLog::~cTvaLog(void) {
   if (buffer) free(buffer);
+  if (mailfrom) free(mailfrom);
+  if (mailto) free(mailto);
 }
 
-bool cTvaLog::Append(const char *Fmt, ...)
+//	Append an entry to the log. Ensure the entry is CR-terminated.
+
+void cTvaLog::Append(const char *Fmt, ...)
 {
   va_list ap;
 
   if (!buffer) {
-	  length = 0;
-	  size = SVDRPOSD_BUFSIZE;
-	  buffer = (char *) malloc(sizeof(char) * size);
+    length = 0;
+    size = 4096;
+    buffer = (char *) malloc(sizeof(char) * size);
   }
   while (buffer) {
-	  va_start(ap, Fmt);
-	  int n = vsnprintf(buffer + length, size - length, Fmt, ap);
-	  va_end(ap);
-
-	  if (n < size - length) {
-		  length += n;
-		  return true;
-	  }
-	  // overflow: realloc and try again
-	  size *= 2;
-	  char *tmp = (char *) realloc(buffer, sizeof(char) * size);
-	  if (!tmp)
-		  free(buffer);
-	  buffer = tmp;
+    va_start(ap, Fmt);
+    int n = vsnprintf(buffer + length, size - length, Fmt, ap);
+    va_end(ap);
+    if (n < size - length - 1) {
+      length += n;
+      if (*(buffer+length-1) != '\n') {
+	*(buffer+length) = '\n';
+	length++;
+	*(buffer+length) = '\0';
+      }
+      return;
+    }
+// overflow: realloc and try again
+    size *= 2;
+    char *tmp = (char *) realloc(buffer, sizeof(char) * size);
+    if (!tmp) free(buffer);
+    buffer = tmp;
   }
-  return false;
+  return;
 }
 
 int cTvaLog::Length(void) {
   if (!buffer) return 0;
   return length;
 }
+
+void cTvaLog::setmailTo(char *opt) {
+  mailto = strcpyrealloc(mailto, opt);
+}
+
+void cTvaLog::setmailFrom(char *opt) {
+  mailfrom = strcpyrealloc(mailfrom, opt);
+}
+
+//	Mail out the daily report.
+
+void cTvaLog::MailLog(void) {
+FILE* mail;
+char mailcmd[256];
+
+  if (length == 0) return;
+
+  snprintf(mailcmd, sizeof(mailcmd), "/usr/sbin/sendmail -i -oem  %s", mailto);
+  if (!(mail = popen(mailcmd, "w"))) {
+    esyslog("vdrtva: cannot open sendmail");
+    return;
+  }
+  fprintf(mail, "From: %s\n", mailfrom);
+  fprintf(mail, "To: %s\n", mailto);
+  fprintf(mail, "Subject: vdrTva report\n");
+//  fprintf(mail, "Content-Type: text/plain; charset=%s\n", GetCodeset().c_str());
+  fprintf(mail, "\n");
+  fputs(buffer, mail);
+  pclose(mail);
+  Clear();
+}
+
 
 /*
 	cTvaFilter - capture the CRID data from EIT.

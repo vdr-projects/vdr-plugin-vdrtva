@@ -15,6 +15,7 @@ public:
 class cTvaStatusMonitor : public cStatus {
   private:
     time_t timeradded;
+    const cTimer *lasttimer;
   protected:
     virtual void TimerChange(const cTimer *Timer, eTimerChange Change);
                // Indicates a change in the timer settings.
@@ -26,6 +27,7 @@ class cTvaStatusMonitor : public cStatus {
     cTvaStatusMonitor(void);
     int GetTimerAddedDelta(void);
     void ClearTimerAdded(void);
+    const cTimer *GetLastTimer() { return lasttimer; }
 };
 
 
@@ -45,15 +47,21 @@ public:
 
 class cTvaLog {
   private:
-    char *buffer;
+    char *buffer, *mailfrom, *mailto;
     int length;
     int size;
   public:
     cTvaLog(void);
     ~cTvaLog(void);
-    bool Append(const char *Fmt, ...);
+    void Append(const char *Fmt, ...);
     const char* Buffer() { return buffer; }
     int Length(void);
+    void Clear() { length = 0; }
+    void MailLog(void);
+    void setmailTo(char *opt);
+    const char * mailTo() { return mailto; }
+    void setmailFrom(char *opt);
+    const char * mailFrom() { return mailfrom; }
 };
 
 

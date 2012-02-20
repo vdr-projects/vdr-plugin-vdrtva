@@ -1,5 +1,7 @@
-Mail a log file after the update.
- 
+Improve log report (HTML?).
+
+Add suggestions to log report when new timer added.
+
 Check split recordings should create timers if necessary.
 
 Timer clash check code needs to cope with multiple tuner cards.
@@ -7,6 +9,8 @@ Timer clash check code needs to cope with multiple tuner cards.
 I18n (for OSD).
 
 Some events have a series CRID but no item CRID - how to handle these?
+
+Delete a series link if the only timer is manually deleted.
 
 Bugs:
 	'Suggestions' list in memory contains duplicates (removed by SVDRP output).

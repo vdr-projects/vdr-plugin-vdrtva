@@ -33,3 +33,8 @@ VDR Plugin 'vdrtva' Revision History
 2012-02-01: Version 0.1.0
 - Fixed OSD setup menu.
 - Removed duplicates from 'suggestions' report.
+
+2012-02-20: Version 0.1.1
+- When timer clash detected, check alternatives for further clashes.
+- Disable functions needing CRID data if none captured yet.
+- Optionally email a daily report.

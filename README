@@ -62,14 +62,27 @@ OSD (default 03:00). It captures CRID data for a time (default 10 minutes) then:
 - Checks that the event being recorded by each timer is the same as when the
   timer was set (ie that the EPG has not changed in the meantime)
 
-- Flags any split events (eg a long programme with a news sumary in the middle).
+- Flags any split events (eg a long programme with a news summary in the middle).
   At present a manual check is needed that all parts of the programme are set to
   be recorded.
 
-The plugin logs its activity through the VDR syslog.
+The plugin takes the following parameters:
+
+  -l n     --lifetime=n         Lifetime of new timers (default 99)
+  -m addr  --mailaddr=addr      Address to send mail report
+  -p n     --priority=n         Priority of new timers (default 99)
+  -s n     --serieslifetime=n   Days to remember a series after the last event
+                                (default 30)
+  -u HH:MM --updatetime=HH:MM   Time to update series links (default 03:00)
+
+The plugin logs activity through the VDR syslog, unless the -m parameter is set
+in which case only errors go to syslog and a report is emailed to the given 
+address daily.
 
 The plugin has an SVDRP interface which is mainly used for debugging, but could
 be used to interface with other applications. The commands are:
+
+LLOG	Print the pending log report
 
 LSTL	Print the series links list
 
