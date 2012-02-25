@@ -102,7 +102,6 @@ cPluginvdrTva::cPluginvdrTva(void)
 cPluginvdrTva::~cPluginvdrTva()
 {
   // Clean up after yourself!
-  delete statusMonitor;
 }
 
 const char *cPluginvdrTva::CommandLineHelp(void)
@@ -221,6 +220,7 @@ void cPluginvdrTva::Stop(void)
     Filter = NULL;
   }
   tvalog.MailLog();
+  if(statusMonitor) delete statusMonitor;
 }
 
 void cPluginvdrTva::Housekeeping(void)
@@ -346,16 +346,13 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   }
   else if (strcasecmp(Command, "LSTS") == 0) {
     if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {
-      SuggestCRIDs->Sort();
       ReplyCode = 250;
       cSuggestCRID *suggest = SuggestCRIDs->First();
       while (suggest) {
 	cSuggestCRID *next = SuggestCRIDs->Next(suggest);
-	  if (!next || strcmp(next->iCRID(), suggest->iCRID()) || strcmp(next->gCRID(), suggest->gCRID())) {
-	  cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
-	  if(chanDA) {
-	    reply.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
-	  }
+	cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
+	if(chanDA) {
+	  reply.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
 	}
 	suggest = next;
       }
@@ -446,6 +443,17 @@ void cPluginvdrTva::StopDataCapture()
   if (Filter) {
     delete Filter;
     Filter = NULL;
+    if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {	// De-dup the suggestions list.
+      SuggestCRIDs->Sort();
+      cSuggestCRID *suggest = SuggestCRIDs->First();
+      while (suggest) {
+	cSuggestCRID *next = SuggestCRIDs->Next(suggest);
+	if (next && !strcmp(next->iCRID(), suggest->iCRID()) && !strcmp(next->gCRID(), suggest->gCRID())) {
+	  SuggestCRIDs->Del(suggest);
+	}
+	suggest = next;
+      }
+    }
     isyslog("vdrtva: Data capture stopped");
   }
 }
@@ -683,7 +691,7 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
   cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
   if (!eventcrid || !chanda) {
-    isyslog("vdrtva: Cannot find alternatives for '%s'", event->Title());
+    REPORT("Cannot find alternatives for '%s' - no series link data", event->Title());
     return;
   }
   bool found = false;
@@ -781,9 +789,10 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
   if (timer->Parse(timercmd)) {
     cTimer *t = Timers.GetTimer(timer);
     if (!t) {
+      timer->SetEvent(event);
       Timers.Add(timer);
       Timers.SetModified();
-      REPORT("timer %s added on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
+      REPORT("Timer created for '%s' on %s, %s %04d-%04d", etitle, channel->Name(), *DateString(starttime), timer->Start(), timer->Stop());
       return true;
     }
     isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
@@ -793,7 +802,7 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
 
 //	Report actions to syslog if we don't want an email.
 
-void tvasyslog(const char *Fmt, ...) {
+void cPluginvdrTva::tvasyslog(const char *Fmt, ...) {
   
   va_list ap;
   char buff[4096];
