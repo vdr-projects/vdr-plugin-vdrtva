@@ -23,7 +23,7 @@ cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
 static const char *VERSION        = "0.1.1";
-static const char *DESCRIPTION    = "TV-Anytime plugin";
+static const char *DESCRIPTION    = "Series Record plugin";
 //static const char *MAINMENUENTRY  = "vdrTva";
 
 int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
@@ -110,7 +110,8 @@ const char *cPluginvdrTva::CommandLineHelp(void)
   return "  -l n     --lifetime=n       Lifetime of new timers (default 99)\n"
 	 "  -m addr  --mailaddr=addr    Address to send mail report\n"
 	 "  -p n     --priority=n       Priority of new timers (default 99)\n"
-	 "  -s n     --serieslifetime=n Days to remember a series after the last event (default 30)\n"
+	 "  -s n     --serieslifetime=n Days to remember a series after the last event\n"
+	 "                              (default 30)\n"
 	 "  -u HH:MM --updatetime=HH:MM Time to update series links (default 03:00)\n";
 }
 
@@ -517,7 +518,7 @@ void cPluginvdrTva::LoadLinksFile()
       LinkItem = Links->NewLinkItem(scrid, modtime, icrids);
     }
     fclose (f);
-    isyslog("vdrtva: loaded %d series links\n", Links->MaxNumber());
+    isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
   }
   else esyslog("vdrtva: series links file not found\n");
 }
@@ -536,7 +537,7 @@ bool cPluginvdrTva::SaveLinksFile()
 	fprintf(f, "%s,%d;%s\n", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
       }
       else {
-	isyslog ("vdrtva: Expiring series %s\n", Item->sCRID());
+	isyslog ("vdrtva: Expiring series %s", Item->sCRID());
 	Links->Del(Item);
       }
       Item = next;
@@ -555,24 +556,21 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
 {
   if ((Timers.Count() == 0) || (!EventCRIDs)) return false;
   bool status = false;
-  for (int i = 0; i < Timers.Count(); i++) {
-    cTimer *timer = Timers.Get(i);
-    if (timer) {
+  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
 // find the event for this timer
-      const cEvent *event = timer->Event();
-      if (event) {
-	cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+    const cEvent *event = ti->Event();
+    if (event) {
+      cChannel *channel = Channels.GetByChannelID(event->ChannelID());
 // find the sCRID and iCRID for the event
-	cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-	cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
-	if (eventcrid && chanda) {
-	  cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
-	  cString icrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->iCRID());
+      cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+      if (eventcrid && chanda) {
+	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
+	cString icrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->iCRID());
 // scan the links table for the sCRID
 //   if found, check if the iCRID is present, if not add it
 //   else create a new links entry
-	  status |= AddSeriesLink(scrid, event->StartTime(), icrid);
-	}
+	status |= AddSeriesLink(scrid, event->StartTime(), icrid);
       }
     }
   }
@@ -585,6 +583,9 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 {
   bool saveNeeded = false;
   if (!Links || (Links->MaxNumber() < 1)) return false;
+  cSchedulesLock SchedulesLock;
+  const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
+  if (!Schedules) return false;
 // Foreach CRID
   for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
     cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
@@ -604,16 +605,12 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 // if not found, add a new timer for the event and update the series.
 	  if (!done) {
 	    cChannel *channel = Channels.GetByNumber(eventCRID->Cid());
-	    cSchedulesLock SchedulesLock;
-	    const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
-	    if (Schedules) {
-	      const cSchedule *schedule = Schedules->GetSchedule(channel);
-	      if (schedule) {
-		const cEvent *event = schedule->GetEvent(eventCRID->Eid());
-		if (CreateTimerFromEvent(event)) {
-		  AddSeriesLink(scrid, event->StartTime(), icrid);
-		  saveNeeded = true;
-		}
+	    const cSchedule *schedule = Schedules->GetSchedule(channel);
+	    if (schedule) {
+	      const cEvent *event = schedule->GetEvent(eventCRID->Eid());
+	      if (CreateTimerFromEvent(event)) {
+		AddSeriesLink(scrid, event->StartTime(), icrid);
+		saveNeeded = true;
 	      }
 	    }
 	  }
@@ -629,22 +626,17 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 
 void cPluginvdrTva::CheckChangedEvents()
 {
+  cSchedulesLock SchedulesLock;
+  const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
   if (Timers.Count() == 0) return;
-  for (int i = 0; i < Timers.Count(); i++) {
-    cTimer *timer = Timers.Get(i);
-    if (timer) {
-      const cChannel *channel = timer->Channel();
-      cSchedulesLock SchedulesLock;
-      const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
-      if (Schedules) {
-	const cSchedule *schedule = Schedules->GetSchedule(channel);
-	if (schedule) {
-	  const cEvent *event = schedule->GetEvent(NULL, timer->StartTime());
-	  if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", timer->File(), *DayDateTime(timer->StartTime()));
-	  else if (strcmp(timer->File(), event->Title())) {
-	    REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(timer->StartTime()), timer->File(), event->Title());
-	  }
-	}
+  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
+    const cChannel *channel = ti->Channel();
+    const cSchedule *schedule = Schedules->GetSchedule(channel);
+    if (schedule) {
+      const cEvent *event = schedule->GetEvent(NULL, ti->StartTime());
+      if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", ti->File(), *DayDateTime(ti->StartTime()));
+      else if (strcmp(ti->File(), event->Title())) {
+	REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(ti->StartTime()), ti->File(), event->Title());
       }
     }
   }
@@ -690,6 +682,8 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   cChannel *channel = Channels.GetByChannelID(event->ChannelID());
   cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
   cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+  cSchedulesLock SchedulesLock;
+  const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (!eventcrid || !chanda) {
     REPORT("Cannot find alternatives for '%s' - no series link data", event->Title());
     return;
@@ -700,33 +694,26 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
       cChanDA *chanda2 = ChanDAs->GetByChannelID(eventcrid2->Cid());
       if (strcmp(chanda->DA(), chanda2->DA()) == 0) {
 	cChannel *channel2 = Channels.GetByNumber(eventcrid2->Cid());
-	cSchedulesLock SchedulesLock;
-	const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
-	if (schedules) {
-	  const cSchedule *schedule = schedules->GetSchedule(channel2);
-	  if (schedule) {
-	    const cEvent *event2 = schedule->GetEvent(eventcrid2->Eid(), 0);
-	    if (!found) {
-	      REPORT("Alternatives for '%s':", event->Title());
-	      found = true;
-	    }
-	    bool clash = false;
-	    for (int i = 1; i < Timers.Count(); i++) {
-	      cTimer *timer = Timers.Get(i);
-	      if (timer) {
-		if((timer->StartTime() >= event2->StartTime() && timer->StartTime() < event2->EndTime())
-		  ||(event2->StartTime() >= timer->StartTime() && event2->StartTime() < timer->StopTime())) {
-		  cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
-		  if (timer->Channel()->Transponder() != channel->Transponder()) {
-		    REPORT("%s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), timer->File());
-		    clash = true;
-		  }
-		}
+	const cSchedule *schedule = schedules->GetSchedule(channel2);
+	if (schedule) {
+	  const cEvent *event2 = schedule->GetEvent(eventcrid2->Eid(), 0);
+	  if (!found) {
+	    REPORT("Alternatives for '%s':", event->Title());
+	    found = true;
+	  }
+	  bool clash = false;
+	  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
+	    if((ti->StartTime() >= event2->StartTime() && ti->StartTime() < event2->EndTime())
+	    ||(event2->StartTime() >= ti->StartTime() && event2->StartTime() < ti->StopTime())) {
+	      cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
+	      if (ti->Channel()->Transponder() != channel->Transponder()) {
+		REPORT("%s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), ti->File());
+		clash = true;
 	      }
 	    }
-	    if (!clash) {
-	      REPORT("%s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
-	    }
+	  }
+	  if (!clash) {
+	    REPORT("%s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
 	  }
 	}
       }
@@ -742,21 +729,18 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
 bool cPluginvdrTva::CheckSplitTimers(void)
 {
   if (Timers.Count() == 0) return false;
-  for (int i = 0; i < Timers.Count(); i++) {
-    cTimer *timer = Timers.Get(i);
-    if (timer) {
-      const cEvent *event = timer->Event();
-      if (event) {
-	cChannel *channel = Channels.GetByChannelID(event->ChannelID());
-	cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-	cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
-	if (eventcrid && chanda && strchr(eventcrid->iCRID(), '#')) {
+  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
+    const cEvent *event = ti->Event();
+    if (event) {
+      cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+      cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+      if (eventcrid && chanda && strchr(eventcrid->iCRID(), '#')) {
 //	  char crid[Utf8BufSize(256)], *next;
 //	  strcpy(crid, eventcrid->iCRID());
 //	  char *prefix = strtok_r(crid, "#", &next);
 //	  char *suffix = strtok_r(NULL, "#", &next);
-	  REPORT("Timer for split event '%s' found - check all parts are being recorded!", event->Title());
-	}
+	REPORT("Timer for split event '%s' found - check all parts are being recorded!", event->Title());
       }
     }
   }
