@@ -40,3 +40,6 @@ VDR Plugin 'vdrtva' Revision History
 - Optionally email a daily report.
 - 'Permanently' remove duplicates from suggestions.
 - Fixed segfault when VDR called with -h.
+
+2012-03-16: Version 0.1.2
+- Rewrite of mailed report.

@@ -65,6 +65,22 @@ class cTvaLog {
 };
 
 
+class cTvaTimerItem : public cListObject {
+private:
+  cTimer *timer;
+public:
+  cTvaTimerItem(cTimer *Timer);
+  virtual int Compare(const cListObject &ListObject) const;
+  cTimer *Timer(void) { return timer; }
+};
+
+
+class cTvaTimers : public cConfig<cTvaTimerItem> {
+public:
+  cTvaTimers(void);
+};
+
+
 class cChanDA : public cListObject {
   private:
     int cid;

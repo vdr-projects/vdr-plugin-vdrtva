@@ -22,7 +22,7 @@ cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.1.1";
+static const char *VERSION        = "0.1.2";
 static const char *DESCRIPTION    = "Series Record plugin";
 //static const char *MAINMENUENTRY  = "vdrTva";
 
@@ -53,10 +53,12 @@ private:
   void CheckChangedEvents(void);
   void CheckTimerClashes(void);
   void FindAlternatives(const cEvent *event);
+  void FindSuggestions(const cEvent *event);
   void StartDataCapture(void);
   void StopDataCapture(void);
   void Update(void);
   void Check(void);
+  void Report(void);
   void tvasyslog(const char *Fmt, ...);
 
 public:
@@ -209,7 +211,7 @@ bool cPluginvdrTva::Start(void)
   nextactiontime = mktime(&tm_r);
   if (nextactiontime < now) nextactiontime += SECSINDAY;
   ctime_r(&nextactiontime, buff);
-  REPORT("Vdrtva initialised, next update due at %s", buff);
+  isyslog("Vdrtva initialised, next update due at %s", buff);
   return true;
 }
 
@@ -245,6 +247,7 @@ void cPluginvdrTva::Housekeeping(void)
 	break;
       case 3:
 	Check();
+	Report();
 	nextactiontime += (SECSINDAY - collectionperiod);
 	state = 0;
 	tvalog.MailLog();
@@ -310,6 +313,8 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
     "    Print the Links list.",
     "LSTS\n"
     "    Print the suggested events list",
+    "LSTT\n"
+    "    Print the list of timers with suggestions for each event",
     "LSTY\n"
     "    Print the Event list including CRIDs.",
     "LSTZ\n"
@@ -362,6 +367,12 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     }
     else
       return cString::sprintf("No suggested events defined");
+  }
+  else if (strcasecmp(Command, "LSTT") == 0) {
+    if (Timers.Count() == 0) return cString::sprintf("No timers defined");
+    if (!EventCRIDs) return cString::sprintf("No CRIDs available");
+    Report();
+    return cString::sprintf("Report generated");
   }
   else if (strcasecmp(Command, "LSTY") == 0) {
     if (EventCRIDs && (EventCRIDs->MaxNumber() >= 1)) {
@@ -475,6 +486,20 @@ void cPluginvdrTva::Check()
   isyslog("vdrtva: Checks complete");
 }
 
+void cPluginvdrTva::Report()
+{
+  if ((Timers.Count() == 0) || (!EventCRIDs)) return;
+  REPORT(" \nTimers and Suggestions\n----------------------\n ");
+  cTvaTimers tvatimers;
+  for (cTvaTimerItem *ti = tvatimers.First(); ti; ti = tvatimers.Next(ti)) {
+    const cEvent *event = ti->Timer()->Event();
+    if (event) {
+      REPORT("'%s' (%s %s)", event->Title(), ti->Timer()->Channel()->Name(), *DayDateTime(event->StartTime()));
+      FindSuggestions(event);
+    }
+  }
+}
+
 // add a new event to the Links table, either as an addition to an existing series or as a new series.
 // return false = nothing done, true = new event for old series, or new series.
 
@@ -487,7 +512,7 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *ic
 	  cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
 	  modtime = max(Item->ModTime(), modtime);
 	  Item->Set(Item->sCRID(), modtime, icrids);
-	  REPORT("Adding new event %s to series %s\n", icrid, scrid);
+	  isyslog("Adding new event %s to series %s", icrid, scrid);
 	  return true;
 	}
 	return false;
@@ -495,7 +520,7 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *ic
     }
   }
   Links->NewLinkItem(scrid, modtime, icrid);
-  REPORT("Creating new series %s for event %s\n", scrid, icrid);
+  isyslog("Creating new series %s for event %s", scrid, icrid);
   return true;
 }
 
@@ -520,7 +545,7 @@ void cPluginvdrTva::LoadLinksFile()
     fclose (f);
     isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
   }
-  else esyslog("vdrtva: series links file not found\n");
+  else esyslog("vdrtva: series links file not found");
 }
   
 bool cPluginvdrTva::SaveLinksFile()
@@ -611,6 +636,7 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 	      if (CreateTimerFromEvent(event)) {
 		AddSeriesLink(scrid, event->StartTime(), icrid);
 		saveNeeded = true;
+//		FindSuggestions(event);
 	      }
 	    }
 	  }
@@ -685,7 +711,7 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   cSchedulesLock SchedulesLock;
   const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (!eventcrid || !chanda) {
-    REPORT("Cannot find alternatives for '%s' - no series link data", event->Title());
+    isyslog("Cannot find alternatives for '%s' - no series link data", event->Title());
     return;
   }
   bool found = false;
@@ -707,13 +733,13 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
 	    ||(event2->StartTime() >= ti->StartTime() && event2->StartTime() < ti->StopTime())) {
 	      cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
 	      if (ti->Channel()->Transponder() != channel->Transponder()) {
-		REPORT("%s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), ti->File());
+		REPORT("  %s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), ti->File());
 		clash = true;
 	      }
 	    }
 	  }
 	  if (!clash) {
-	    REPORT("%s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
+	    REPORT("  %s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
 	  }
 	}
       }
@@ -784,17 +810,68 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
   return false;
 }
 
+//	Find 'suggestions' for an event
+
+void cPluginvdrTva::FindSuggestions(const cEvent *event)
+{
+  bool found = false;
+  cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+  cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
+  cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+  cSchedulesLock SchedulesLock;
+  const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
+  if (eventcrid && chanda && schedules) {
+    for (cSuggestCRID *suggestcrid = SuggestCRIDs->First(); suggestcrid; suggestcrid = SuggestCRIDs->Next(suggestcrid)) {
+      if((channel->Number() == suggestcrid->Cid()) && (!strcmp(suggestcrid->iCRID(), eventcrid->iCRID()))) {
+	for (cEventCRID *ecrid2 = EventCRIDs->First(); ecrid2; ecrid2 = EventCRIDs->Next(ecrid2)) {
+	  if (!strcmp(suggestcrid->gCRID(), ecrid2->iCRID())) {
+	    cChanDA *chanda2 = ChanDAs->GetByChannelID(ecrid2->Cid());
+	    if (!strcmp(chanda->DA(), chanda2->DA())) {
+	      cChannel *channel2 = Channels.GetByNumber(ecrid2->Cid());
+	      const cSchedule *schedule = schedules->GetSchedule(channel2);
+	      if (schedule) {
+		const cEvent *event2 = schedule->GetEvent(ecrid2->Eid(), 0);
+		if (!found) {
+		  REPORT("  Suggestions for this event:");
+		  found = true;
+		}
+		REPORT("    '%s' (%s, %s)", event2->Title(), channel2->Name(), *DayDateTime(event2->StartTime()));
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
+}
+
 //	Report actions to syslog if we don't want an email.
 
 void cPluginvdrTva::tvasyslog(const char *Fmt, ...) {
   
   va_list ap;
-  char buff[4096];
+  int size = 4096;
+  char *buff = (char *) malloc(sizeof(char) * size);
 
-  va_start(ap, Fmt);
-  vsnprintf(buff, sizeof(buff), Fmt, ap);
-  va_end(ap);
-  isyslog("vdrtva: %s", buff);
+  while (buff) {
+    va_start(ap, Fmt);
+    int n = vsnprintf(buff, size, Fmt, ap);
+    va_end(ap);
+    if (n < size) {
+      char *save, *b = buff;
+      while (b = strtok_r(b, "\n", &save)) {
+        isyslog("vdrtva: %s", b);
+	b = NULL;
+      }
+      free(buff);
+      return;
+    }
+// overflow: realloc and try again
+    size *= 2;
+    char *tmp = (char *) realloc(buff, sizeof(char) * size);
+    if (!tmp) free(buff);
+    buff = tmp;
+  }
 }
 
 
@@ -941,6 +1018,37 @@ char mailcmd[256];
   fputs(buffer, mail);
   pclose(mail);
   Clear();
+}
+
+
+/*
+	cTvaTimerItem - the things we need to do just to list the timers in order...
+*/
+
+
+cTvaTimerItem::cTvaTimerItem(cTimer *Timer)
+{
+  timer = Timer;
+}
+
+int cTvaTimerItem::Compare(const cListObject &ListObject) const
+{
+  return timer->Compare(*((cTvaTimerItem *)&ListObject)->timer);
+}
+
+
+/*
+	cTvaTimers
+*/
+
+
+cTvaTimers::cTvaTimers(void)
+{
+  for (cTimer *timer = Timers.First(); timer; timer = Timers.Next(timer)) {
+//      timer->SetEventFromSchedule(); // make sure the event is current
+    Add(new cTvaTimerItem(timer));
+  }
+  Sort();
 }
 
 

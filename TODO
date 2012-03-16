@@ -1,7 +1,5 @@
 Improve log report (HTML?).
 
-Add suggestions to log report when new timer added.
-
 Check split recordings should create timers if necessary.
 
 Timer clash check code needs to cope with multiple tuner cards.

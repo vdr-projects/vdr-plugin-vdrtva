@@ -88,6 +88,8 @@ LSTL	Print the series links list
 
 LSTS	Print the 'suggested' events list
 
+LSTT	Print the timers and any suggestions for them
+
 LSTY	Print the CRIDs for each event
 
 LSTZ	Print the Default Authority data for each channel
