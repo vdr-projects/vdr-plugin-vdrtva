@@ -493,7 +493,7 @@ void cPluginvdrTva::Report()
   cTvaTimers tvatimers;
   for (cTvaTimerItem *ti = tvatimers.First(); ti; ti = tvatimers.Next(ti)) {
     const cEvent *event = ti->Timer()->Event();
-    if (event) {
+    if (event && ti->Timer()->HasFlags(tfActive)) {
       REPORT("'%s' (%s %s)", event->Title(), ti->Timer()->Channel()->Name(), *DayDateTime(event->StartTime()));
       FindSuggestions(event);
     }
@@ -584,7 +584,7 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
 // find the event for this timer
     const cEvent *event = ti->Event();
-    if (event) {
+    if (event && ti->HasFlags(tfActive)) {
       cChannel *channel = Channels.GetByChannelID(event->ChannelID());
 // find the sCRID and iCRID for the event
       cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
@@ -658,7 +658,7 @@ void cPluginvdrTva::CheckChangedEvents()
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
     const cChannel *channel = ti->Channel();
     const cSchedule *schedule = Schedules->GetSchedule(channel);
-    if (schedule) {
+    if (schedule && ti->HasFlags(tfActive)) {
       const cEvent *event = schedule->GetEvent(NULL, ti->StartTime());
       if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", ti->File(), *DayDateTime(ti->StartTime()));
       else if (strcmp(ti->File(), event->Title())) {
@@ -676,10 +676,10 @@ void cPluginvdrTva::CheckTimerClashes(void)
   if (Timers.Count() < 2) return;
   for (int i = 1; i < Timers.Count(); i++) {
     cTimer *timer1 = Timers.Get(i);
-    if (timer1) {
+    if (timer1 && timer1->HasFlags(tfActive)) {
       for (int j = 0; j < i; j++) {
 	cTimer *timer2 = Timers.Get(j);
-	if (timer2) {
+	if (timer2 && timer2->HasFlags(tfActive)) {
 	  if((timer1->StartTime() >= timer2->StartTime() && timer1->StartTime() < timer2->StopTime())
 	   ||(timer2->StartTime() >= timer1->StartTime() && timer2->StartTime() < timer1->StopTime())) {
 	    const cChannel *channel1 = timer1->Channel();
@@ -757,7 +757,7 @@ bool cPluginvdrTva::CheckSplitTimers(void)
   if (Timers.Count() == 0) return false;
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
     const cEvent *event = ti->Event();
-    if (event) {
+    if (event && ti->HasFlags(tfActive)) {
       cChannel *channel = Channels.GetByChannelID(event->ChannelID());
       cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
       cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
@@ -778,16 +778,15 @@ bool cPluginvdrTva::CheckSplitTimers(void)
 bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
   struct tm tm_r;
   char startbuff[64], endbuff[64], etitle[256];
-  int flags;
+  int flags = tfActive;
   cChannel *channel = Channels.GetByChannelID(event->ChannelID());
   time_t starttime = event->StartTime();
   time_t endtime = event->EndTime();
   if (!Setup.UseVps) {
     starttime -= Setup.MarginStart * 60;
     endtime += Setup.MarginStop * 60;
-    flags = 1;
   }
-  else flags = 5;
+  else flags |= tfVps;
   localtime_r(&starttime, &tm_r);
   strftime(startbuff, sizeof(startbuff), "%Y-%m-%d:%H%M", &tm_r);
   localtime_r(&endtime, &tm_r);
@@ -1013,7 +1012,7 @@ char mailcmd[256];
   fprintf(mail, "From: %s\n", mailfrom);
   fprintf(mail, "To: %s\n", mailto);
   fprintf(mail, "Subject: vdrTva report\n");
-//  fprintf(mail, "Content-Type: text/plain; charset=%s\n", GetCodeset().c_str());
+  fprintf(mail, "Content-Type: text/plain; charset=ISO-8859-1\n");
   fprintf(mail, "\n");
   fputs(buffer, mail);
   pclose(mail);
