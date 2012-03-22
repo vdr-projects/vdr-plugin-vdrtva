@@ -37,7 +37,6 @@ cTvaLog tvalog;
 class cPluginvdrTva : public cPlugin {
 private:
   // Add any member variables or functions you may need here.
-  int state;
   time_t nextactiontime;
   char* configDir;
   cTvaFilter *Filter;
@@ -96,7 +95,6 @@ cPluginvdrTva::cPluginvdrTva(void)
   seriesLifetime = 30 * SECSINDAY;
   priority = 99;
   lifetime = 99;
-  state = 0;
   collectionperiod = 10 * 60;
   updatetime = 300;
 }
@@ -201,17 +199,7 @@ bool cPluginvdrTva::Start(void)
       esyslog("vdrtva: no mail server found");
     }
   }
-  struct tm tm_r;
-  char buff[32];
-  time_t now = time(NULL);
-  localtime_r(&now, &tm_r);
-  tm_r.tm_sec = 0;
-  tm_r.tm_hour = updatetime / 100;
-  tm_r.tm_min = updatetime % 100;
-  nextactiontime = mktime(&tm_r);
-  if (nextactiontime < now) nextactiontime += SECSINDAY;
-  ctime_r(&nextactiontime, buff);
-  isyslog("Vdrtva initialised, next update due at %s", buff);
+  nextactiontime = time(NULL) + 300;		// Start CRID collection after 5 minutes
   return true;
 }
 
@@ -229,6 +217,11 @@ void cPluginvdrTva::Stop(void)
 void cPluginvdrTva::Housekeeping(void)
 {
   // Perform any cleanup or other regular tasks.
+  static int state = 0;
+  struct tm tm_r;
+  time_t now;
+  char buff[32];
+
   if (nextactiontime < time(NULL)) {
     statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
     switch (state) {
@@ -239,17 +232,35 @@ void cPluginvdrTva::Housekeeping(void)
 	break;
       case 1:
 	StopDataCapture();
+	now = time(NULL);
+	localtime_r(&now, &tm_r);
+	tm_r.tm_sec = 0;
+	tm_r.tm_hour = updatetime / 100;
+	tm_r.tm_min = updatetime % 100;
+	nextactiontime = mktime(&tm_r);
+	if (nextactiontime < now) nextactiontime += SECSINDAY;
+	ctime_r(&nextactiontime, buff);
+	isyslog("Vdrtva initialised, next update due at %s", buff);
 	state++;
 	break;
       case 2:
-	Update();
+	StartDataCapture();
+	nextactiontime += collectionperiod;
 	state++;
 	break;
       case 3:
+	StopDataCapture();
+	state++;
+	break;
+      case 4:
+	Update();
+	state++;
+	break;
+      case 5:
 	Check();
 	Report();
 	nextactiontime += (SECSINDAY - collectionperiod);
-	state = 0;
+	state = 2;
 	tvalog.MailLog();
 	break;
     }

@@ -10,7 +10,5 @@ Some events have a series CRID but no item CRID - how to handle these?
 
 Delete a series link if the only timer is manually deleted.
 
-Gather CRID data immediately when VDR started.
-
 Bugs:
 	Very rare crash 'pure virtual method called' in plugin. 
