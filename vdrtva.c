@@ -59,6 +59,7 @@ private:
   void Check(void);
   void Report(void);
   void tvasyslog(const char *Fmt, ...);
+  time_t NextUpdateTime(void);
 
 public:
   cPluginvdrTva(void);
@@ -218,9 +219,6 @@ void cPluginvdrTva::Housekeeping(void)
 {
   // Perform any cleanup or other regular tasks.
   static int state = 0;
-  struct tm tm_r;
-  time_t now;
-  char buff[32];
 
   if (nextactiontime < time(NULL)) {
     statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
@@ -232,35 +230,17 @@ void cPluginvdrTva::Housekeeping(void)
 	break;
       case 1:
 	StopDataCapture();
-	now = time(NULL);
-	localtime_r(&now, &tm_r);
-	tm_r.tm_sec = 0;
-	tm_r.tm_hour = updatetime / 100;
-	tm_r.tm_min = updatetime % 100;
-	nextactiontime = mktime(&tm_r);
-	if (nextactiontime < now) nextactiontime += SECSINDAY;
-	ctime_r(&nextactiontime, buff);
-	isyslog("Vdrtva initialised, next update due at %s", buff);
 	state++;
 	break;
       case 2:
-	StartDataCapture();
-	nextactiontime += collectionperiod;
-	state++;
-	break;
-      case 3:
-	StopDataCapture();
-	state++;
-	break;
-      case 4:
 	Update();
 	state++;
 	break;
-      case 5:
+      case 3:
 	Check();
 	Report();
-	nextactiontime += (SECSINDAY - collectionperiod);
-	state = 2;
+	nextactiontime = NextUpdateTime();
+	state = 0;
 	tvalog.MailLog();
 	break;
     }
@@ -270,6 +250,25 @@ void cPluginvdrTva::Housekeeping(void)
     Check();
     statusMonitor->ClearTimerAdded();
   }
+}
+
+time_t cPluginvdrTva::NextUpdateTime(void)
+{
+  struct tm tm_r;
+  time_t now, then;
+  char buff[32];
+
+  now = time(NULL);
+  localtime_r(&now, &tm_r);
+  tm_r.tm_sec = 0;
+  tm_r.tm_hour = updatetime / 100;
+  tm_r.tm_min = updatetime % 100;
+  tm_r.tm_mday++;
+  then = mktime(&tm_r);
+  if (then < now) then += SECSINDAY;
+  ctime_r(&then, buff);
+  isyslog("Next update due at %s", buff);
+  return then;
 }
 
 void cPluginvdrTva::MainThreadHook(void)
