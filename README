@@ -3,6 +3,10 @@ the terms of the GNU General Public License as published by the Free Software
 Foundation; either version 2 of the License, or (at your option) any later
 version. See the file COPYING for more information.
 
+Written by:		Dave Pickles
+Project homepage	http://projects.vdr-developer.org/projects/vdrtva
+
+
 Description:
 
 TV-Anytime is the name given to a set of technologies which aim to simplify the
@@ -87,8 +91,6 @@ LLOG	Print the pending log report
 LSTL	Print the series links list
 
 LSTS	Print the 'suggested' events list
-
-LSTT	Print the timers and any suggestions for them
 
 LSTY	Print the CRIDs for each event
 

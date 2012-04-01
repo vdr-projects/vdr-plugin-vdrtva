@@ -43,3 +43,10 @@ VDR Plugin 'vdrtva' Revision History
 
 2012-03-16: Version 0.1.2
 - Rewrite of mailed report.
+
+2012-04-01: Version 0.1.3
+- Ignore inactive timers.
+- Don't hard-code VDR status flags.
+- Start capturing CRID data soon after VDR startup.
+- COPYING file omitted from distribution.
+- Update time wrong after DST change.
