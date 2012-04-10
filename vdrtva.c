@@ -594,7 +594,7 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
 // find the event for this timer
     const cEvent *event = ti->Event();
-    if (event && ti->HasFlags(tfActive)) {
+    if (event && ti->HasFlags(tfActive) && (ti->WeekDays() == 0)) {
       cChannel *channel = Channels.GetByChannelID(event->ChannelID());
 // find the sCRID and iCRID for the event
       cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
@@ -721,7 +721,7 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   cSchedulesLock SchedulesLock;
   const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (!eventcrid || !chanda) {
-    isyslog("Cannot find alternatives for '%s' - no series link data", event->Title());
+    REPORT("Cannot find alternatives for '%s' - no part of a series", event->Title());
     return;
   }
   bool found = false;
