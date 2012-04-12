@@ -22,7 +22,7 @@ cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.1.2";
+static const char *VERSION        = "0.1.3";
 static const char *DESCRIPTION    = "Series Record plugin";
 //static const char *MAINMENUENTRY  = "vdrTva";
 
@@ -42,13 +42,13 @@ private:
   cTvaFilter *Filter;
   cTvaStatusMonitor *statusMonitor;
   bool AppendItems(const char* Option);
-  bool AddSeriesLink(const char *scrid, int modtime, const char *icrid);
+  bool AddSeriesLink(const char *scrid, int modtime, const char *icrid, const char *path);
   void LoadLinksFile(void);
   bool SaveLinksFile(void);
   bool UpdateLinksFromTimers(void);
   bool AddNewEventsToSeries(void);
   bool CheckSplitTimers(void);
-  bool CreateTimerFromEvent(const cEvent *event);
+  bool CreateTimerFromEvent(const cEvent *event, char *Path);
   void CheckChangedEvents(void);
   void CheckTimerClashes(void);
   void FindAlternatives(const cEvent *event);
@@ -267,7 +267,7 @@ time_t cPluginvdrTva::NextUpdateTime(void)
   then = mktime(&tm_r);
   if (then < now) then += SECSINDAY;
   ctime_r(&then, buff);
-  isyslog("Next update due at %s", buff);
+  isyslog("vdrtva: Next update due at %s", buff);
   return then;
 }
 
@@ -354,7 +354,7 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     if (Links && (Links->MaxNumber() >=1)) {
       ReplyCode = 250;
       for (cLinkItem *linkItem = Links->First(); linkItem; linkItem = Links->Next(linkItem)) {
-	reply.Append("%s,%d;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs());
+	reply.Append("%s,%d;%s;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs(), linkItem->Path());
       }
     }
     if (reply.Length() > 0) return cString(reply.Buffer());
@@ -463,6 +463,7 @@ void cPluginvdrTva::StartDataCapture()
 void cPluginvdrTva::StopDataCapture()
 {
   if (Filter) {
+    cDevice::ActualDevice()->Detach(Filter);
     delete Filter;
     Filter = NULL;
     if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {	// De-dup the suggestions list.
@@ -513,7 +514,7 @@ void cPluginvdrTva::Report()
 // add a new event to the Links table, either as an addition to an existing series or as a new series.
 // return false = nothing done, true = new event for old series, or new series.
 
-bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *icrid)
+bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *icrid, const char *path)
 {
   if (Links && (Links->MaxNumber() >=1)) {
     for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
@@ -521,16 +522,16 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *ic
 	if (strstr(Item->iCRIDs(), icrid) == NULL) {
 	  cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
 	  modtime = max(Item->ModTime(), modtime);
-	  Item->Set(Item->sCRID(), modtime, icrids);
-	  isyslog("Adding new event %s to series %s", icrid, scrid);
+	  Item->Set(Item->sCRID(), modtime, icrids, Item->Path());
+	  isyslog("vdrtva: Adding new event %s to series %s", icrid, scrid);
 	  return true;
 	}
 	return false;
       }
     }
   }
-  Links->NewLinkItem(scrid, modtime, icrid);
-  isyslog("Creating new series %s for event %s", scrid, icrid);
+  Links->NewLinkItem(scrid, modtime, icrid, path);
+  isyslog("vdrtva: Creating new series %s for event %s", scrid, icrid);
   return true;
 }
 
@@ -548,9 +549,10 @@ void cPluginvdrTva::LoadLinksFile()
     while ((s = ReadLine.Read(f)) != NULL) {
       char *scrid = strtok_r(s, ",", &strtok_next);
       char *mtime = strtok_r(NULL, ";", &strtok_next);
-      char *icrids = strtok_r(NULL, "!", &strtok_next);
+      char *icrids = strtok_r(NULL, ";", &strtok_next);
+      char *path = strtok_r(NULL, ";", &strtok_next);
       modtime = atoi(mtime);
-      LinkItem = Links->NewLinkItem(scrid, modtime, icrids);
+      LinkItem = Links->NewLinkItem(scrid, modtime, icrids, path);
     }
     fclose (f);
     isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
@@ -569,7 +571,11 @@ bool cPluginvdrTva::SaveLinksFile()
     while (Item) {
       cLinkItem *next = Links->Next(Item);
       if ((Item->ModTime() + seriesLifetime) > time(NULL)) {
-	fprintf(f, "%s,%d;%s\n", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+	fprintf(f, "%s,%d;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+	if (Item->Path()) {
+	  fprintf(f, ";%s\n", Item->Path());
+	}
+	else fprintf(f, "\n");
       }
       else {
 	isyslog ("vdrtva: Expiring series %s", Item->sCRID());
@@ -605,7 +611,12 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
 // scan the links table for the sCRID
 //   if found, check if the iCRID is present, if not add it
 //   else create a new links entry
-	status |= AddSeriesLink(scrid, event->StartTime(), icrid);
+	char *path = strcpyrealloc(NULL, ti->File());
+	if (char *p = strrchr(path, '~')) {
+	  *p = '\0';
+	}
+	status |= AddSeriesLink(scrid, event->StartTime(), icrid, path);
+	free (path);
       }
     }
   }
@@ -643,8 +654,8 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 	    const cSchedule *schedule = Schedules->GetSchedule(channel);
 	    if (schedule) {
 	      const cEvent *event = schedule->GetEvent(eventCRID->Eid());
-	      if (CreateTimerFromEvent(event)) {
-		AddSeriesLink(scrid, event->StartTime(), icrid);
+	      if (CreateTimerFromEvent(event, Item->Path())) {
+		AddSeriesLink(scrid, event->StartTime(), icrid, NULL);
 		saveNeeded = true;
 //		FindSuggestions(event);
 	      }
@@ -670,9 +681,12 @@ void cPluginvdrTva::CheckChangedEvents()
     const cSchedule *schedule = Schedules->GetSchedule(channel);
     if (schedule && ti->HasFlags(tfActive)) {
       const cEvent *event = schedule->GetEvent(NULL, ti->StartTime());
-      if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", ti->File(), *DayDateTime(ti->StartTime()));
-      else if (strcmp(ti->File(), event->Title())) {
-	REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(ti->StartTime()), ti->File(), event->Title());
+      const char *file = strrchr(ti->File(), '~');
+      if (!file) file = ti->File();
+      else file++;
+      if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", file, *DayDateTime(ti->StartTime()));
+      else if (strcmp(file, event->Title())) {
+	REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(ti->StartTime()), file, event->Title());
       }
     }
   }
@@ -721,7 +735,7 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
   cSchedulesLock SchedulesLock;
   const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (!eventcrid || !chanda) {
-    REPORT("Cannot find alternatives for '%s' - no part of a series", event->Title());
+    REPORT("Cannot find alternatives for '%s' - not part of a series", event->Title());
     return;
   }
   bool found = false;
@@ -785,7 +799,7 @@ bool cPluginvdrTva::CheckSplitTimers(void)
 
 // Create a timer from an event, setting VPS parameter explicitly.
 
-bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
+bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event, char *Path) {
   struct tm tm_r;
   char startbuff[64], endbuff[64], etitle[256];
   int flags = tfActive;
@@ -803,7 +817,13 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event) {
   strftime(endbuff, sizeof(endbuff), "%H%M", &tm_r);
   strn0cpy (etitle, event->Title(), sizeof(etitle));
   strreplace(etitle, ':', '|');
-  cString timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, etitle);
+  cString timercmd;
+  if (Path) {
+    timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s~%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, Path, etitle);
+  }
+  else {
+    timercmd = cString::sprintf("%u:%d:%s:%s:%d:%d:%s:\n", flags, channel->Number(), startbuff, endbuff, priority, lifetime, etitle);
+  }
   cTimer *timer = new cTimer;
   if (timer->Parse(timercmd)) {
     cTimer *t = Timers.GetTimer(timer);
@@ -1366,20 +1386,22 @@ cSuggestCRID *cSuggestCRIDs::NewSuggestCRID(int cid, char *icrid, char *gcrid)
 
 cLinkItem::cLinkItem(void)
 {
-  sCrid = iCrids = NULL;
+  sCrid = iCrids = path = NULL;
 }
 
 cLinkItem::~cLinkItem(void)
 {
   free(sCrid);
   free(iCrids);
+  free(path);
 }
 
-void cLinkItem::Set(const char *sCRID, int ModTime, const char *iCRIDs)
+void cLinkItem::Set(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path)
 {
   sCrid = strcpyrealloc(sCrid, sCRID);
   modtime = ModTime;
   iCrids = strcpyrealloc(iCrids, iCRIDs);
+  path = strcpyrealloc(path, Path);
 }
 
 /*
@@ -1391,10 +1413,10 @@ cLinks::cLinks(void)
   maxNumber = 0;
 }
 
-cLinkItem *cLinks::NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs)
+cLinkItem *cLinks::NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *path)
 {
   cLinkItem *NewLinkItem = new cLinkItem;
-  NewLinkItem->Set(sCRID, ModTime, iCRIDs);
+  NewLinkItem->Set(sCRID, ModTime, iCRIDs, path);
   Add(NewLinkItem);
   Links->SetMaxNumber(Links->MaxNumber()+1);
   return NewLinkItem;

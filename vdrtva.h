@@ -172,13 +172,15 @@ class cLinkItem : public cListObject {
     char *sCrid;
     int modtime;
     char *iCrids;
+    char *path;
   public:
     cLinkItem(void);
     ~cLinkItem(void);
-    void Set(const char *sCRID, int ModTime, const char *iCRIDs);
+    void Set(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
     char * iCRIDs(void) { return iCrids; }
     char * sCRID(void) { return sCrid; }
     int ModTime(void) { return modtime; }
+    char * Path(void) { return path; }
 };
 
 class cLinks : public cRwLock, public cConfig<cLinkItem> {
@@ -189,5 +191,5 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
 //    ~cLinks(void);
     int MaxNumber(void) { return maxNumber; }
     void SetMaxNumber(int number) { maxNumber = number; }
-    cLinkItem *NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs);
+    cLinkItem *NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
 };
