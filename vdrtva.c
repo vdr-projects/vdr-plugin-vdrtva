@@ -614,8 +614,9 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
 	char *path = strcpyrealloc(NULL, ti->File());
 	if (char *p = strrchr(path, '~')) {
 	  *p = '\0';
+	  status |= AddSeriesLink(scrid, event->StartTime(), icrid, path);
 	}
-	status |= AddSeriesLink(scrid, event->StartTime(), icrid, path);
+	else status |= AddSeriesLink(scrid, event->StartTime(), icrid, NULL);
 	free (path);
       }
     }
