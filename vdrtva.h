@@ -86,12 +86,10 @@ class cChanDA : public cListObject {
     int cid;
     char *defaultAuthority;
   public:
-    cChanDA(void);
+    cChanDA(int Cid, char *DA);
     ~cChanDA(void);
     int Cid(void) { return cid; }
-    void Set(int Cid);
     char * DA(void) { return defaultAuthority; }
-    void SetDA(char *DA);
 };
 
 class cChanDAs : public cRwLock, public cConfig<cChanDA> {
@@ -102,9 +100,8 @@ class cChanDAs : public cRwLock, public cConfig<cChanDA> {
     cChanDAs(void);
     ~cChanDAs(void);
     int MaxNumber(void) { return maxNumber; }
-    void SetMaxNumber(int number) { maxNumber = number; }
     cChanDA *GetByChannelID(int cid);
-    cChanDA *NewChanDA(int Cid);
+    cChanDA *NewChanDA(int Cid, char *DA);
 };
 
 
@@ -115,13 +112,11 @@ class cEventCRID : public cListObject {
     char *iCrid;
     char *sCrid;
   public:
-    cEventCRID(void);
+    cEventCRID(int Cid, tEventID Eid, char *iCRID, char *sCRID);
     ~cEventCRID(void);
     tEventID Eid(void) { return eid; }
-    void Set(int Cid, tEventID Eid);
     char * iCRID(void) { return iCrid; }
     char * sCRID(void) { return sCrid; }
-    void SetCRIDs(char *iCRID, char *sCRID);
     int Cid(void) { return cid; }
 };
 
@@ -133,9 +128,9 @@ class cEventCRIDs : public cRwLock, public cConfig<cEventCRID> {
     cEventCRIDs(void);
     ~cEventCRIDs(void);
     int MaxNumber(void) { return maxNumber; }
-    void SetMaxNumber(int number) { maxNumber = number; }
     cEventCRID *GetByID(int Cid, tEventID Eid);
-    cEventCRID *NewEventCRID(int Cid, tEventID Eid);
+    cEventCRID *NewEventCRID(int Cid, tEventID Eid, char *iCRID, char *sCRID);
+    void Expire(void);
 };
 
 
@@ -145,12 +140,11 @@ class cSuggestCRID : public cListObject {
     char *gCrid;
     int cid;
   public:
-    cSuggestCRID(void);
+    cSuggestCRID(int Cid, char *iCRID, char *gCRID);
     ~cSuggestCRID(void);
     char * iCRID(void) { return iCrid; }
     char * gCRID(void) { return gCrid; }
     int Cid(void) { return cid; }
-    void Set(int Cid, char *iCRID, char *gCRID);
     virtual int Compare(const cListObject &ListObject) const;
 };
 
@@ -160,10 +154,10 @@ class cSuggestCRIDs : public cRwLock, public cConfig<cSuggestCRID> {
     int maxNumber;
   public:
     cSuggestCRIDs(void);
-    ~cSuggestCRIDs(void);
     int MaxNumber(void) { return maxNumber; }
-    void SetMaxNumber(int number) { maxNumber = number; }
     cSuggestCRID *NewSuggestCRID(int Cid, char *icrid, char *gcrid);
+    void DeDup(void);
+    void Expire(void);
 };
 
 
@@ -174,7 +168,7 @@ class cLinkItem : public cListObject {
     char *iCrids;
     char *path;
   public:
-    cLinkItem(void);
+    cLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
     ~cLinkItem(void);
     void Set(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
     char * iCRIDs(void) { return iCrids; }
@@ -188,8 +182,6 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     int maxNumber;
   public:
     cLinks(void);
-//    ~cLinks(void);
     int MaxNumber(void) { return maxNumber; }
-    void SetMaxNumber(int number) { maxNumber = number; }
     cLinkItem *NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
 };

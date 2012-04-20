@@ -16,7 +16,9 @@ standard is ETSI TS 102 323.
 
 In the UK a subset of the TV-Anytime specification is broadcast on the DTV
 service under the trade name "FreeView Plus". This plugin is written for the UK
-version but should work with the full specification (untested).
+version, has been tested on New Zealand DVB-S and is believed to be compatible
+with the NorDig standard used in Scandanavian countries plus Eire. It should
+also work with the full specification (untested).
 
 TV-Anytime data is contained in Content Reference Identifiers (CRIDs). The
 syntax of a CRID is described in RFC 4078; it is a URI-compliant string of the
@@ -53,8 +55,9 @@ Operation:
 
 The use of the 'Accurate Recording' feature is described in README-vps.
 
-The plugin runs every 24 hours at a time set by the '-u' parameter or in VDR's
-OSD (default 03:00). It captures CRID data for a time (default 10 minutes) then:
+The plugin captures CRID data continuously, beginning 5 minutes after VDR
+startup. A maintenance task runs every 24 hours at a time set by the '-u'
+parameter or in VDR's OSD (default 03:00) which:
 
 - Checks for new manually-created timers and adds series links for them.
 
@@ -66,9 +69,13 @@ OSD (default 03:00). It captures CRID data for a time (default 10 minutes) then:
 - Checks that the event being recorded by each timer is the same as when the
   timer was set (ie that the EPG has not changed in the meantime)
 
-- Flags any split events (eg a long programme with a news summary in the middle).
-  At present a manual check is needed that all parts of the programme are set to
-  be recorded.
+- Flags any split events (eg a long programme with a news summary in the
+  middle). At present a manual check is needed that all parts of the programme
+  are set to be recorded.
+
+- Optionally sends a mail report listing new timers which have been
+  automatically created, any timer clash warnings, and a complete list of timers
+  and any suggestions for them.
 
 The plugin takes the following parameters:
 
@@ -121,8 +128,8 @@ Points to remember:
 - The 'suggested' events list may have CRIDs which do not appear in the events
   list.
 
-The plugin is compatible with VDR version >= 1.7.19. The patch version will work 
-with VDR 1.6.
+The plugin is compatible with VDR version >= 1.7.19. The patch version will
+work with VDR 1.6.
 
-Although I use this software on my VDR installation, this is Beta-quality code 
-- USE AT YOUR OWN RISK!!
+Although I use this software day-to-day on my VDR installation, this is
+Beta-quality code - USE AT YOUR OWN RISK!!

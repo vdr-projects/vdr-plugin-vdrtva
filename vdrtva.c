@@ -22,7 +22,7 @@ cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
 
-static const char *VERSION        = "0.1.3";
+static const char *VERSION        = "0.2.0";
 static const char *DESCRIPTION    = "Series Record plugin";
 //static const char *MAINMENUENTRY  = "vdrTva";
 
@@ -58,6 +58,7 @@ private:
   void Update(void);
   void Check(void);
   void Report(void);
+  void Expire(void);
   void tvasyslog(const char *Fmt, ...);
   time_t NextUpdateTime(void);
 
@@ -229,18 +230,15 @@ void cPluginvdrTva::Housekeeping(void)
 	state++;
 	break;
       case 1:
-	StopDataCapture();
-	state++;
-	break;
-      case 2:
+	Expire();
 	Update();
 	state++;
 	break;
-      case 3:
+      case 2:
 	Check();
 	Report();
 	nextactiontime = NextUpdateTime();
-	state = 0;
+	state = 1;
 	tvalog.MailLog();
 	break;
     }
@@ -463,21 +461,19 @@ void cPluginvdrTva::StartDataCapture()
 void cPluginvdrTva::StopDataCapture()
 {
   if (Filter) {
-    cDevice::ActualDevice()->Detach(Filter);
     delete Filter;
     Filter = NULL;
-    if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {	// De-dup the suggestions list.
-      SuggestCRIDs->Sort();
-      cSuggestCRID *suggest = SuggestCRIDs->First();
-      while (suggest) {
-	cSuggestCRID *next = SuggestCRIDs->Next(suggest);
-	if (next && !strcmp(next->iCRID(), suggest->iCRID()) && !strcmp(next->gCRID(), suggest->gCRID())) {
-	  SuggestCRIDs->Del(suggest);
-	}
-	suggest = next;
-      }
-    }
     isyslog("vdrtva: Data capture stopped");
+  }
+}
+
+void cPluginvdrTva::Expire()
+{
+  if (!EventCRIDs) return;
+  EventCRIDs->Expire();
+  if (SuggestCRIDs) {
+    SuggestCRIDs->DeDup();
+    SuggestCRIDs->Expire();
   }
 }
 
@@ -1103,11 +1099,11 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
       sectionSyncer.Reset();
       SI::SDT sdt(Data, false);
       if (!sdt.CheckCRCAndParse()) {
-        dsyslog ("vdrtva: SDT Parse / CRC error\n");
+        dsyslog ("vdrtva: SDT Parse / CRC error");
         return;
       }
       if (!sectionSyncer.Sync(sdt.getVersionNumber(), sdt.getSectionNumber(), sdt.getLastSectionNumber())) {
-        dsyslog ("vdrtva: SDT Syncer error\n");
+        dsyslog ("vdrtva: SDT Syncer error");
         return;
       }
       SI::SDT::Service SiSdtService;
@@ -1123,8 +1119,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 		  SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
 		  char DaBuf[Utf8BufSize(1024)];
 		  da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
-		  chanDA = ChanDAs->NewChanDA(chan->Number());
-		  chanDA->SetDA(DaBuf);
+		  chanDA = ChanDAs->NewChanDA(chan->Number(), DaBuf);
 		}
 		break;
 	      default: ;
@@ -1140,7 +1135,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 //      sectionSyncer.Reset();
         SI::EIT eit(Data, false);
         if (!eit.CheckCRCAndParse()) {
-          dsyslog ("vdrtva: EIT Parse / CRC error\n");
+          dsyslog ("vdrtva: EIT Parse / CRC error");
           return;
         }
 
@@ -1175,12 +1170,12 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 			// There can be more than one type 0x33 descriptor per event (each with one CRID).
 			case 0x03:
 			case 0x33:
-			  cde.identifier.getText(gCRIDBuf, sizeof(gCRIDBuf));		// FIXME Rashly assuming that a 0x31 CRID will always precede a 0x33 CRID.
-			  if (iCRIDBuf[0]) SuggestCRIDs->NewSuggestCRID(chan->Number(), iCRIDBuf, gCRIDBuf);
+			  cde.identifier.getText(gCRIDBuf, sizeof(gCRIDBuf));		// FIXME Rashly assuming that 0x31 & 0x32 CRIDs will always precede a 0x33 CRID.
+			  if (iCRIDBuf[0] && sCRIDBuf[0]) SuggestCRIDs->NewSuggestCRID(chan->Number(), iCRIDBuf, gCRIDBuf);
 		      }
                     }
                     else {
-                      dsyslog ("vdrtva: Incorrect CRID Loc %x\n", cde.getCridLocation());
+                      dsyslog ("vdrtva: Incorrect CRID Loc %x", cde.getCridLocation());
                     } 
                   }
                 }
@@ -1190,8 +1185,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
               delete d;
             }
             if (iCRIDBuf[0] && sCRIDBuf[0]) {	// Only log events which are part of a series.
-              eventCRID = EventCRIDs->NewEventCRID(chan->Number(), SiEitEvent.getEventId());
-	      eventCRID->SetCRIDs(iCRIDBuf, sCRIDBuf);
+              eventCRID = EventCRIDs->NewEventCRID(chan->Number(), SiEitEvent.getEventId(), iCRIDBuf, sCRIDBuf);
             }
 	  }
         }
@@ -1206,23 +1200,15 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
   cChanDA - Default Authority for a channel.
 */
 
-cChanDA::cChanDA(void)
+cChanDA::cChanDA(int Cid, char *DA)
 {
-  defaultAuthority = NULL;
+  cid = Cid; 
+  defaultAuthority = strcpyrealloc(NULL, DA);
 }
 
 cChanDA::~cChanDA(void)
 {
   free(defaultAuthority);
-}
-
-
-void cChanDA::Set(int Cid) {
-  cid = Cid; 
-}
-
-void cChanDA::SetDA(char *DA) {
-  defaultAuthority = strcpyrealloc(defaultAuthority, DA);
 }
 
 /*
@@ -1252,13 +1238,12 @@ cChanDA *cChanDAs::GetByChannelID(int cid)
   return NULL;
 }
 
-cChanDA *cChanDAs::NewChanDA(int Cid)
+cChanDA *cChanDAs::NewChanDA(int Cid, char *DA)
 {
-  cChanDA *NewChanDA = new cChanDA;
-  NewChanDA->Set(Cid);
+  cChanDA *NewChanDA = new cChanDA(Cid, DA);
   Add(NewChanDA);
   chanDAHash.Add(NewChanDA, Cid);
-  ChanDAs->SetMaxNumber(ChanDAs->MaxNumber()+1);
+  maxNumber++;
   return NewChanDA;
 }
 
@@ -1267,25 +1252,18 @@ cChanDA *cChanDAs::NewChanDA(int Cid)
   cEventCRID - CRIDs for an event.
 */
 
-cEventCRID::cEventCRID(void)
+cEventCRID::cEventCRID(int Cid, tEventID Eid, char *iCRID, char *sCRID)
 {
-  iCrid = sCrid = NULL;
+  eid = Eid; 
+  cid = Cid; 
+  iCrid = strcpyrealloc(NULL, iCRID);
+  sCrid = strcpyrealloc(NULL, sCRID);
 }
 
 cEventCRID::~cEventCRID(void)
 {
   free (iCrid);
   free (sCrid);
-}
-
-void cEventCRID::Set(int Cid, tEventID Eid) {
-  eid = Eid; 
-  cid = Cid; 
-}
-
-void cEventCRID::SetCRIDs(char *iCRID, char *sCRID) {
-  iCrid = strcpyrealloc(iCrid, iCRID);
-  sCrid = strcpyrealloc(sCrid, sCRID);
 }
 
 
@@ -1316,14 +1294,37 @@ cEventCRID *cEventCRIDs::GetByID(int Cid, tEventID Eid)
   return NULL;
 }
 
-cEventCRID *cEventCRIDs::NewEventCRID(int Cid, tEventID Eid)
+cEventCRID *cEventCRIDs::NewEventCRID(int Cid, tEventID Eid, char *iCRID, char *sCRID)
 {
-  cEventCRID *NewEventCRID = new cEventCRID;
-  NewEventCRID->Set(Cid, Eid);
+  cEventCRID *NewEventCRID = new cEventCRID(Cid, Eid, iCRID, sCRID);
   Add(NewEventCRID);
   EventCRIDHash.Add(NewEventCRID, Eid + Cid*33000);
-  EventCRIDs->SetMaxNumber(EventCRIDs->MaxNumber()+1);
+  maxNumber++;
   return NewEventCRID;
+}
+
+void cEventCRIDs::Expire(void)
+{
+  int i = 0;
+  cSchedulesLock SchedulesLock;
+  const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
+  if (schedules) {
+    cEventCRID *crid = First();
+    while (crid) {
+      cEventCRID *next = Next(crid);
+      cChannel *channel = Channels.GetByNumber(crid->Cid());
+      const cSchedule *schedule = schedules->GetSchedule(channel);
+      if (schedule) {
+	const cEvent *event = schedule->GetEvent(crid->Eid(), 0);
+	if (!event) {
+	  Del(crid);
+	  i++;
+	}
+      }
+      crid = next;
+    }
+  }
+  dsyslog("vdrtva: %d expired CRIDs removed", i);
 }
 
 
@@ -1331,21 +1332,17 @@ cEventCRID *cEventCRIDs::NewEventCRID(int Cid, tEventID Eid)
   cSuggestCRID - CRIDs of suggested items for an event.
 */
 
-cSuggestCRID::cSuggestCRID(void)
+cSuggestCRID::cSuggestCRID(int Cid, char *iCRID, char *gCRID)
 {
-  iCrid = gCrid = NULL;
+  iCrid = strcpyrealloc(NULL, iCRID);
+  gCrid = strcpyrealloc(NULL, gCRID);
+  cid = Cid;
 }
 
 cSuggestCRID::~cSuggestCRID(void)
 {
   free (iCrid);
   free (gCrid);
-}
-
-void cSuggestCRID::Set(int Cid, char *iCRID, char *gCRID) {
-  iCrid = strcpyrealloc(iCrid, iCRID);
-  gCrid = strcpyrealloc(gCrid, gCRID);
-  cid = Cid;
 }
 
 int cSuggestCRID::Compare(const cListObject &ListObject) const
@@ -1367,17 +1364,50 @@ cSuggestCRIDs::cSuggestCRIDs(void)
   maxNumber = 0;
 }
 
-cSuggestCRIDs::~cSuggestCRIDs(void)
-{
-}
-
 cSuggestCRID *cSuggestCRIDs::NewSuggestCRID(int cid, char *icrid, char *gcrid)
 {
-  cSuggestCRID *NewSuggestCRID = new cSuggestCRID;
-  NewSuggestCRID->Set(cid, icrid, gcrid);
+  cSuggestCRID *NewSuggestCRID = new cSuggestCRID(cid, icrid, gcrid);
   Add(NewSuggestCRID);
-  SuggestCRIDs->SetMaxNumber(SuggestCRIDs->MaxNumber()+1);
+  maxNumber++;
   return NewSuggestCRID;
+}
+
+void cSuggestCRIDs::DeDup(void) {
+  if (maxNumber < 2) return;
+  int i = 0;
+  Sort();
+  cSuggestCRID *suggest = First();
+  while (suggest) {
+    cSuggestCRID *next = Next(suggest);
+    if (next && !strcmp(next->iCRID(), suggest->iCRID()) && !strcmp(next->gCRID(), suggest->gCRID())) {
+      Del(suggest);
+      i++;
+    }
+    suggest = next;
+  }
+  dsyslog("vdrtva: %d duplicate suggestions removed", i);
+}
+
+void cSuggestCRIDs::Expire(void) {
+  if (maxNumber == 0) return;
+  int i = 0;
+  cSuggestCRID *suggest = First();
+  while (suggest) {
+    cSuggestCRID *next = Next(suggest);
+    bool found = false;
+    for (cEventCRID *crid = EventCRIDs->First(); crid; crid = EventCRIDs->Next(crid)) {
+      if (!strcmp(suggest->iCRID(), crid->iCRID())) {
+	found = true;
+	break;
+      }
+    }
+    if (!found) {
+      Del(suggest);
+      i++;
+    }
+    suggest = next;
+  }
+  dsyslog("vdrtva: %d expired suggestions removed", i);
 }
 
 
@@ -1385,9 +1415,12 @@ cSuggestCRID *cSuggestCRIDs::NewSuggestCRID(int cid, char *icrid, char *gcrid)
 	cLinkItem - Entry from the links file
 */
 
-cLinkItem::cLinkItem(void)
+cLinkItem::cLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path)
 {
-  sCrid = iCrids = path = NULL;
+  sCrid = strcpyrealloc(NULL, sCRID);
+  modtime = ModTime;
+  iCrids = strcpyrealloc(NULL, iCRIDs);
+  path = strcpyrealloc(NULL, Path);
 }
 
 cLinkItem::~cLinkItem(void)
@@ -1416,10 +1449,9 @@ cLinks::cLinks(void)
 
 cLinkItem *cLinks::NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *path)
 {
-  cLinkItem *NewLinkItem = new cLinkItem;
-  NewLinkItem->Set(sCRID, ModTime, iCRIDs, path);
+  cLinkItem *NewLinkItem = new cLinkItem(sCRID, ModTime, iCRIDs, path);
   Add(NewLinkItem);
-  Links->SetMaxNumber(Links->MaxNumber()+1);
+  maxNumber++;
   return NewLinkItem;
 }
 

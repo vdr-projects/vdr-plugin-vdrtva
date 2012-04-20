@@ -50,3 +50,10 @@ VDR Plugin 'vdrtva' Revision History
 - Start capturing CRID data soon after VDR startup.
 - COPYING file omitted from distribution.
 - Update time wrong after DST change.
+
+2012-04-20: Version 0.2.0
+- Improvements suggested by Richard Scobie:
+  - Ignore repeating timers.
+  - Handle timers recording into subdirectories.
+  - Gather CRID data continuously.
+- Plugin now compatible with New Zealand DVB-S.
