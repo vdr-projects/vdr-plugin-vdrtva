@@ -677,7 +677,7 @@ void cPluginvdrTva::CheckChangedEvents()
     const cChannel *channel = ti->Channel();
     const cSchedule *schedule = Schedules->GetSchedule(channel);
     if (schedule && ti->HasFlags(tfActive)) {
-      const cEvent *event = schedule->GetEvent(NULL, ti->StartTime());
+      const cEvent *event = schedule->GetEvent(0, ti->StartTime());
       const char *file = strrchr(ti->File(), '~');
       if (!file) file = ti->File();
       else file++;
@@ -908,7 +908,7 @@ void cPluginvdrTva::tvasyslog(const char *Fmt, ...) {
 
 cTvaStatusMonitor::cTvaStatusMonitor(void)
 {
-  timeradded = NULL;
+  timeradded = 0;
   lasttimer = NULL;
 }
 
@@ -930,7 +930,7 @@ int cTvaStatusMonitor::GetTimerAddedDelta(void)
 
 void cTvaStatusMonitor::ClearTimerAdded(void)
 {
-  timeradded = NULL;
+  timeradded = 0;
   return;
 }
 
