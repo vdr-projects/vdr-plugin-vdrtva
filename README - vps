@@ -12,8 +12,8 @@ longer work.
 To use VPS for accurate recording, some conditions must be met:
 
 - VDR must be compiled with the 'VPS Fallback' patch (included with this
-  plugin). Note that some Linux distributions (eg. Mandriva) include this
-  patch in their binaries. 
+  plugin). Note that some Linux distributions (eg. Mandriva and Mageia) include
+  this patch in their binaries. 
 - Parameters 'UseVps' and 'VpsFallback' in setup.conf must both be set to 1
 - Timers must have the 'use VPS' flag set
 - The start time of a timer must be set to exactly the scheduled start time of

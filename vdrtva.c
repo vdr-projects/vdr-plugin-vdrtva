@@ -1318,6 +1318,7 @@ void cEventCRIDs::Expire(void)
 	const cEvent *event = schedule->GetEvent(crid->Eid(), 0);
 	if (!event) {
 	  Del(crid);
+	  maxNumber--;
 	  i++;
 	}
       }
@@ -1381,6 +1382,7 @@ void cSuggestCRIDs::DeDup(void) {
     cSuggestCRID *next = Next(suggest);
     if (next && !strcmp(next->iCRID(), suggest->iCRID()) && !strcmp(next->gCRID(), suggest->gCRID())) {
       Del(suggest);
+      maxNumber--;
       i++;
     }
     suggest = next;
@@ -1403,6 +1405,7 @@ void cSuggestCRIDs::Expire(void) {
     }
     if (!found) {
       Del(suggest);
+      maxNumber--;
       i++;
     }
     suggest = next;
