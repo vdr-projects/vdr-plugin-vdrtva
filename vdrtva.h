@@ -184,4 +184,6 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     cLinks(void);
     int MaxNumber(void) { return maxNumber; }
     cLinkItem *NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path);
+    bool DeleteItem(const char *sCRID);
+    bool Expire(void);
 };

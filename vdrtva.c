@@ -315,6 +315,8 @@ const char **cPluginvdrTva::SVDRPHelpPages(void)
 {
   // Return help text for SVDRP commands this plugin implements
    static const char *HelpPages[] = {
+    "DELL <sCrid>\n"
+    "    Delete series link by series CRID",
     "LLOG\n"
     "    Print the action log.",
     "LSTL\n"
@@ -343,7 +345,13 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   // Process SVDRP commands this plugin implements
   cTvaLog reply;
   isyslog ("vdrtva: processing command %s", Command);
-  if (strcasecmp(Command, "LLOG") == 0) {
+  if (strcasecmp(Command, "DELL") == 0) {
+    if (Links && Links->DeleteItem(Option)) {
+      return cString::sprintf("Series %s deleted", Option);
+    }
+    else return cString::sprintf("Series %s not found in links file", Option);
+  }
+  else if (strcasecmp(Command, "LLOG") == 0) {
     ReplyCode = 250;
     if (tvalog.Length() > 0) return cString(tvalog.Buffer());
     else return cString::sprintf("Nothing in the buffer!");
@@ -475,6 +483,11 @@ void cPluginvdrTva::Expire()
     SuggestCRIDs->DeDup();
     SuggestCRIDs->Expire();
   }
+  if (Links) {
+    if(Links->Expire()) {
+      SaveLinksFile();
+    }
+  }
 }
 
 void cPluginvdrTva::Update()
@@ -563,21 +576,12 @@ bool cPluginvdrTva::SaveLinksFile()
   cString oldlinks = AddDirectory(configDir, "links.old");
   FILE *f = fopen(newlinks, "w");
   if (f) {
-    cLinkItem *Item = Links->First();
-    while (Item) {
-      cLinkItem *next = Links->Next(Item);
-      if ((Item->ModTime() + seriesLifetime) > time(NULL)) {
-	fprintf(f, "%s,%d;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
-	if (Item->Path()) {
-	  fprintf(f, ";%s\n", Item->Path());
-	}
-	else fprintf(f, "\n");
+    for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
+      fprintf(f, "%s,%d;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+      if (Item->Path()) {
+	fprintf(f, ";%s\n", Item->Path());
       }
-      else {
-	isyslog ("vdrtva: Expiring series %s", Item->sCRID());
-	Links->Del(Item);
-      }
-      Item = next;
+      else fprintf(f, "\n");
     }
     fclose(f);
     unlink (oldlinks);		// Allow to fail if the save file does not exist
@@ -1456,6 +1460,40 @@ cLinkItem *cLinks::NewLinkItem(const char *sCRID, int ModTime, const char *iCRID
   Add(NewLinkItem);
   maxNumber++;
   return NewLinkItem;
+}
+
+bool cLinks::DeleteItem(const char *sCRID)
+{
+  if (maxNumber == 0) return false;
+  cLinkItem *Item = Links->First();
+  while (Item) {
+    cLinkItem *next = Links->Next(Item);
+    if (!strcmp(Item->sCRID(), sCRID)) {
+      Links->Del(Item);
+      maxNumber--;
+      return true;
+    }
+    Item = next;
+  }
+  return false;
+}
+
+bool cLinks::Expire(void)
+{
+  bool status = false;
+  if (maxNumber == 0) return false;
+  cLinkItem *Item = Links->First();
+  while (Item) {
+    cLinkItem *next = Links->Next(Item);
+    if ((Item->ModTime() + seriesLifetime) < time(NULL)) {
+      isyslog ("vdrtva: Expiring series %s", Item->sCRID());
+      Links->Del(Item);
+      maxNumber--;
+      status = true;
+    }
+    Item = next;
+  }
+  return status;
 }
 
 VDRPLUGINCREATOR(cPluginvdrTva); // Don't touch this!
