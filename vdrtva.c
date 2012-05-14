@@ -553,7 +553,6 @@ void cPluginvdrTva::LoadLinksFile()
     char *s;
     char *strtok_next;
     cReadLine ReadLine;
-    cLinkItem *LinkItem;
     int modtime;
     while ((s = ReadLine.Read(f)) != NULL) {
       char *scrid = strtok_r(s, ",", &strtok_next);
@@ -561,7 +560,7 @@ void cPluginvdrTva::LoadLinksFile()
       char *icrids = strtok_r(NULL, ";", &strtok_next);
       char *path = strtok_r(NULL, ";", &strtok_next);
       modtime = atoi(mtime);
-      LinkItem = Links->NewLinkItem(scrid, modtime, icrids, path);
+      Links->NewLinkItem(scrid, modtime, icrids, path);
     }
     fclose (f);
     isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
