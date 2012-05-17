@@ -51,6 +51,7 @@ previous week. Hence it is possible for a PVR to record an entire series by
 using the series CRID, or to find an alternative broadcast for an individual
 item if there is a clash with another recording.
 
+
 Operation:
 
 The use of the 'Accurate Recording' feature is described in README-vps.
@@ -107,6 +108,20 @@ STOP	Start and stop CRID data capture
 STRT
 
 UPDT	Trigger an update of the series links.
+
+
+The plugin stores details of series links in the file links.data which is in the
+VIDEODIR/plugins directory. Entries in this file have the format:
+
+<scrid>,<modtime>;<icrids>;<path>;<title>
+
+scrid	The series CRID.
+modtime	The start time of the last event in this series.
+icrids	The CRIDS of the events in the series, separated by colons.
+path	The subdirectory to store recordings in this series, taken from the first 
+	timer, or the string (NULL) if no subdirectory was given.
+title	The title of the first event in the series.
+
 
 Points to remember:
 

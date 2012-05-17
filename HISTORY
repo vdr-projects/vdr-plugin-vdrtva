@@ -57,3 +57,11 @@ VDR Plugin 'vdrtva' Revision History
   - Handle timers recording into subdirectories.
   - Gather CRID data continuously.
 - Plugin now compatible with New Zealand DVB-S.
+
+2012-05-16: Version 0.2.1
+- Suppress a few compiler warnings with GCC 4.6.
+- Correctly maintain list counts.
+- Rename patch file to match distros.
+- Add patch for latest VDR version (1.7.27).
+- Include series title in links file.
+- Included format of links file in README.
