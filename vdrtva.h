@@ -164,18 +164,18 @@ class cSuggestCRIDs : public cRwLock, public cConfig<cSuggestCRID> {
 class cLinkItem : public cListObject {
   private:
     char *sCrid;
-    int modtime;
+    time_t modtime;
     char *iCrids;
     char *path;
     char *title;
   public:
-    cLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path, const char *Title);
+    cLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title);
     ~cLinkItem(void);
-    void SetModtime(int modtime);
+    void SetModtime(time_t modtime);
     void SetIcrids(const char *icrids);
     char * iCRIDs(void) { return iCrids; }
     char * sCRID(void) { return sCrid; }
-    int ModTime(void) { return modtime; }
+    time_t ModTime(void) { return modtime; }
     char * Path(void) { return path; }
     char * Title(void) { return title; }
 };
@@ -186,7 +186,7 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
   public:
     cLinks(void);
     int MaxNumber(void) { return maxNumber; }
-    cLinkItem *NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path, const char *Title);
+    cLinkItem *NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title);
     bool DeleteItem(const char *sCRID);
     bool Expire(void);
 };

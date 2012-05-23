@@ -42,7 +42,7 @@ private:
   cTvaFilter *Filter;
   cTvaStatusMonitor *statusMonitor;
   bool AppendItems(const char* Option);
-  bool AddSeriesLink(const char *scrid, int modtime, const char *icrid, const char *path, const char *title);
+  bool AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title);
   void LoadLinksFile(void);
   bool SaveLinksFile(void);
   bool UpdateLinksFromTimers(void);
@@ -531,7 +531,7 @@ void cPluginvdrTva::Report()
 // add a new event to the Links table, either as an addition to an existing series or as a new series.
 // return false = nothing done, true = new event for old series, or new series.
 
-bool cPluginvdrTva::AddSeriesLink(const char *scrid, int modtime, const char *icrid, const char *path, const char *title)
+bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title)
 {
   if (Links && (Links->MaxNumber() >=1)) {
     for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
@@ -562,7 +562,7 @@ void cPluginvdrTva::LoadLinksFile()
     char *s;
     char *strtok_next;
     cReadLine ReadLine;
-    int modtime;
+    time_t modtime;
     while ((s = ReadLine.Read(f)) != NULL) {
       char *scrid = strtok_r(s, ",", &strtok_next);
       char *mtime = strtok_r(NULL, ";", &strtok_next);
@@ -587,7 +587,7 @@ bool cPluginvdrTva::SaveLinksFile()
   FILE *f = fopen(newlinks, "w");
   if (f) {
     for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
-      fprintf(f, "%s,%d;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+      fprintf(f, "%s,%ld;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
       if (Item->Path()) {
 	fprintf(f, ";%s", Item->Path());
       }
@@ -1436,7 +1436,7 @@ void cSuggestCRIDs::Expire(void) {
 	cLinkItem - Entry from the links file
 */
 
-cLinkItem::cLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *Path, const char *Title)
+cLinkItem::cLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title)
 {
   sCrid = strcpyrealloc(NULL, sCRID);
   modtime = ModTime;
@@ -1453,7 +1453,7 @@ cLinkItem::~cLinkItem(void)
   free(title);
 }
 
-void cLinkItem::SetModtime(int ModTime)
+void cLinkItem::SetModtime(time_t ModTime)
 {
   modtime = ModTime;
 }
@@ -1472,7 +1472,7 @@ cLinks::cLinks(void)
   maxNumber = 0;
 }
 
-cLinkItem *cLinks::NewLinkItem(const char *sCRID, int ModTime, const char *iCRIDs, const char *path, const char *title)
+cLinkItem *cLinks::NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *path, const char *title)
 {
   cLinkItem *NewLinkItem = new cLinkItem(sCRID, ModTime, iCRIDs, path, title);
   Add(NewLinkItem);
