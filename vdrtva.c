@@ -21,6 +21,7 @@ cChanDAs *ChanDAs;
 cEventCRIDs *EventCRIDs;
 cSuggestCRIDs *SuggestCRIDs;
 cLinks *Links;
+char *configDir;
 
 static const char *VERSION        = "0.2.1";
 static const char *DESCRIPTION    = "Series Record plugin";
@@ -38,13 +39,10 @@ class cPluginvdrTva : public cPlugin {
 private:
   // Add any member variables or functions you may need here.
   time_t nextactiontime;
-  char* configDir;
   cTvaFilter *Filter;
   cTvaStatusMonitor *statusMonitor;
   bool AppendItems(const char* Option);
   bool AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title);
-  void LoadLinksFile(void);
-  bool SaveLinksFile(void);
   bool UpdateLinksFromTimers(void);
   bool AddNewEventsToSeries(void);
   bool CheckSplitTimers(void);
@@ -174,7 +172,8 @@ bool cPluginvdrTva::Start(void)
 {
   // Start any background activities the plugin shall perform.
   configDir = strcpyrealloc(configDir, cPlugin::ConfigDirectory("vdrtva"));
-  LoadLinksFile();
+  Links = new cLinks;
+  Links->Load();
   statusMonitor = new cTvaStatusMonitor;
   if (tvalog.mailTo()) {
     struct stat sb;
@@ -493,7 +492,7 @@ void cPluginvdrTva::Expire()
   }
   if (Links) {
     if(Links->Expire()) {
-      SaveLinksFile();
+      Links->Save();
     }
   }
 }
@@ -502,7 +501,7 @@ void cPluginvdrTva::Update()
 {
   bool status = UpdateLinksFromTimers();
   status |= AddNewEventsToSeries();
-  if(status) SaveLinksFile();
+  if(status) Links->Save();
   isyslog("vdrtva: Updates complete");
 }
 
@@ -550,58 +549,6 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char 
   }
   Links->NewLinkItem(scrid, modtime, icrid, path, title);
   isyslog("vdrtva: Creating new series %s for event %s (%s)", scrid, icrid, title);
-  return true;
-}
-
-void cPluginvdrTva::LoadLinksFile()
-{
-  Links = new cLinks();
-  cString curlinks = AddDirectory(configDir, "links.data");
-  FILE *f = fopen(curlinks, "r");
-  if (f) {
-    char *s;
-    char *strtok_next;
-    cReadLine ReadLine;
-    time_t modtime;
-    while ((s = ReadLine.Read(f)) != NULL) {
-      char *scrid = strtok_r(s, ",", &strtok_next);
-      char *mtime = strtok_r(NULL, ";", &strtok_next);
-      char *icrids = strtok_r(NULL, ";", &strtok_next);
-      char *path = strtok_r(NULL, ";", &strtok_next);
-      char *title = strtok_r(NULL, "`", &strtok_next);
-      modtime = atoi(mtime);
-      if ((path != NULL) && (!strcmp(path, "(NULL)"))) path = NULL;
-      Links->NewLinkItem(scrid, modtime, icrids, path, title);
-    }
-    fclose (f);
-    isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
-  }
-  else esyslog("vdrtva: series links file not found");
-}
-  
-bool cPluginvdrTva::SaveLinksFile()
-{
-  cString curlinks = AddDirectory(configDir, "links.data");
-  cString newlinks = AddDirectory(configDir, "links.new");
-  cString oldlinks = AddDirectory(configDir, "links.old");
-  FILE *f = fopen(newlinks, "w");
-  if (f) {
-    for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
-      fprintf(f, "%s,%ld;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
-      if (Item->Path()) {
-	fprintf(f, ";%s", Item->Path());
-      }
-      else fprintf(f, ";(NULL)");
-      if (Item->Title()) {
-	fprintf(f, ";%s\n", Item->Title());
-      }
-      else fprintf(f, "\n");
-    }
-    fclose(f);
-    unlink (oldlinks);		// Allow to fail if the save file does not exist
-    rename (curlinks, oldlinks);
-    rename (newlinks, curlinks);
-  }
   return true;
 }
 
@@ -1480,14 +1427,64 @@ cLinkItem *cLinks::NewLinkItem(const char *sCRID, time_t ModTime, const char *iC
   return NewLinkItem;
 }
 
+void cLinks::Load()
+{
+  cString curlinks = AddDirectory(configDir, "links.data");
+  FILE *f = fopen(curlinks, "r");
+  if (f) {
+    char *s;
+    char *strtok_next;
+    cReadLine ReadLine;
+    time_t modtime;
+    while ((s = ReadLine.Read(f)) != NULL) {
+      char *scrid = strtok_r(s, ",", &strtok_next);
+      char *mtime = strtok_r(NULL, ";", &strtok_next);
+      char *icrids = strtok_r(NULL, ";", &strtok_next);
+      char *path = strtok_r(NULL, ";", &strtok_next);
+      char *title = strtok_r(NULL, "`", &strtok_next);
+      modtime = atoi(mtime);
+      if ((path != NULL) && (!strcmp(path, "(NULL)"))) path = NULL;
+      NewLinkItem(scrid, modtime, icrids, path, title);
+    }
+    fclose (f);
+    isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
+  }
+  else esyslog("vdrtva: series links file not found");
+}
+  
+void cLinks::Save()
+{
+  cString curlinks = AddDirectory(configDir, "links.data");
+  cString newlinks = AddDirectory(configDir, "links.new");
+  cString oldlinks = AddDirectory(configDir, "links.old");
+  FILE *f = fopen(newlinks, "w");
+  if (f) {
+    for (cLinkItem *Item = First(); Item; Item = Next(Item)) {
+      fprintf(f, "%s,%ld;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+      if (Item->Path()) {
+	fprintf(f, ";%s", Item->Path());
+      }
+      else fprintf(f, ";(NULL)");
+      if (Item->Title()) {
+	fprintf(f, ";%s\n", Item->Title());
+      }
+      else fprintf(f, "\n");
+    }
+    fclose(f);
+    unlink (oldlinks);		// Allow to fail if the save file does not exist
+    rename (curlinks, oldlinks);
+    rename (newlinks, curlinks);
+  }
+}
+
 bool cLinks::DeleteItem(const char *sCRID)
 {
   if (maxNumber == 0) return false;
-  cLinkItem *Item = Links->First();
+  cLinkItem *Item = First();
   while (Item) {
-    cLinkItem *next = Links->Next(Item);
+    cLinkItem *next = Next(Item);
     if (!strcmp(Item->sCRID(), sCRID)) {
-      Links->Del(Item);
+      Del(Item);
       maxNumber--;
       return true;
     }
@@ -1500,12 +1497,12 @@ bool cLinks::Expire(void)
 {
   bool status = false;
   if (maxNumber == 0) return false;
-  cLinkItem *Item = Links->First();
+  cLinkItem *Item = First();
   while (Item) {
-    cLinkItem *next = Links->Next(Item);
+    cLinkItem *next = Next(Item);
     if ((Item->ModTime() + seriesLifetime) < time(NULL)) {
       isyslog ("vdrtva: Expiring series %s", Item->sCRID());
-      Links->Del(Item);
+      Del(Item);
       maxNumber--;
       status = true;
     }
