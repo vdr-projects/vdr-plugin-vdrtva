@@ -1,7 +1,7 @@
-diff -u vdr-1.7.27/config.c vdr-1.7.27.new/config.c
---- vdr-1.7.27/config.c	2012-02-29 10:15:54.000000000 +0000
-+++ vdr-1.7.27.new/config.c	2012-05-14 13:40:00.961364837 +0100
-@@ -414,6 +414,7 @@
+diff -u vdr-1.7.28/config.c vdr-1.7/config.c
+--- vdr-1.7.28/config.c	2012-05-11 12:06:57.000000000 +0100
++++ vdr-1.7/config.c	2012-06-08 11:03:58.670418555 +0100
+@@ -415,6 +415,7 @@
    UseSubtitle = 1;
    UseVps = 0;
    VpsMargin = 120;
@@ -9,7 +9,7 @@ diff -u vdr-1.7.27/config.c vdr-1.7.27.new/config.c
    RecordingDirs = 1;
    FoldersInTimerMenu = 1;
    NumberKeysForChars = 1;
-@@ -608,6 +609,7 @@
+@@ -610,6 +611,7 @@
    else if (!strcasecmp(Name, "UseSubtitle"))         UseSubtitle        = atoi(Value);
    else if (!strcasecmp(Name, "UseVps"))              UseVps             = atoi(Value);
    else if (!strcasecmp(Name, "VpsMargin"))           VpsMargin          = atoi(Value);
@@ -17,7 +17,7 @@ diff -u vdr-1.7.27/config.c vdr-1.7.27.new/config.c
    else if (!strcasecmp(Name, "RecordingDirs"))       RecordingDirs      = atoi(Value);
    else if (!strcasecmp(Name, "FoldersInTimerMenu"))  FoldersInTimerMenu = atoi(Value);
    else if (!strcasecmp(Name, "NumberKeysForChars"))  NumberKeysForChars = atoi(Value);
-@@ -705,6 +707,7 @@
+@@ -708,6 +710,7 @@
    Store("UseSubtitle",        UseSubtitle);
    Store("UseVps",             UseVps);
    Store("VpsMargin",          VpsMargin);
@@ -25,10 +25,10 @@ diff -u vdr-1.7.27/config.c vdr-1.7.27.new/config.c
    Store("RecordingDirs",      RecordingDirs);
    Store("FoldersInTimerMenu", FoldersInTimerMenu);
    Store("NumberKeysForChars", NumberKeysForChars);
-diff -u vdr-1.7.27/config.h vdr-1.7.27.new/config.h
---- vdr-1.7.27/config.h	2012-03-11 10:41:44.000000000 +0000
-+++ vdr-1.7.27.new/config.h	2012-05-14 13:40:00.962364776 +0100
-@@ -274,6 +274,7 @@
+diff -u vdr-1.7.28/config.h vdr-1.7/config.h
+--- vdr-1.7.28/config.h	2012-04-15 11:45:32.000000000 +0100
++++ vdr-1.7/config.h	2012-06-08 11:03:58.672418431 +0100
+@@ -285,6 +285,7 @@
    int UseSubtitle;
    int UseVps;
    int VpsMargin;
@@ -36,10 +36,10 @@ diff -u vdr-1.7.27/config.h vdr-1.7.27.new/config.h
    int RecordingDirs;
    int FoldersInTimerMenu;
    int NumberKeysForChars;
-diff -u vdr-1.7.27/menu.c vdr-1.7.27.new/menu.c
---- vdr-1.7.27/menu.c	2012-03-13 13:14:38.000000000 +0000
-+++ vdr-1.7.27.new/menu.c	2012-05-14 13:40:00.966364532 +0100
-@@ -3112,6 +3112,7 @@
+diff -u vdr-1.7.28/menu.c vdr-1.7/menu.c
+--- vdr-1.7.28/menu.c	2012-05-12 14:08:23.000000000 +0100
++++ vdr-1.7/menu.c	2012-06-08 11:03:58.675418246 +0100
+@@ -3076,6 +3076,7 @@
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Use episode name"),          &data.UseSubtitle));
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Use VPS"),                   &data.UseVps));
    Add(new cMenuEditIntItem( tr("Setup.Recording$VPS margin (s)"),            &data.VpsMargin, 0));
@@ -47,9 +47,9 @@ diff -u vdr-1.7.27/menu.c vdr-1.7.27.new/menu.c
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Mark instant recording"),    &data.MarkInstantRecord));
    Add(new cMenuEditStrItem( tr("Setup.Recording$Name instant recording"),     data.NameInstantRecord, sizeof(data.NameInstantRecord)));
    Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 1, MAXINSTANTRECTIME));
-diff -u vdr-1.7.27/timers.c vdr-1.7.27.new/timers.c
---- vdr-1.7.27/timers.c	2012-02-27 09:38:41.000000000 +0000
-+++ vdr-1.7.27.new/timers.c	2012-05-14 13:40:00.967364471 +0100
+diff -u vdr-1.7.28/timers.c vdr-1.7/timers.c
+--- vdr-1.7.28/timers.c	2012-04-25 10:02:03.000000000 +0100
++++ vdr-1.7/timers.c	2012-06-08 11:03:58.676418184 +0100
 @@ -431,7 +431,7 @@
    deferred = 0;
  
