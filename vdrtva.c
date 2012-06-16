@@ -631,7 +631,7 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 }
 
 // Check timers to see if the event they were set to record is still in the EPG.
-// This won't work if the start time is padded.
+// This won't work if VPS is not used and the start time is padded by a custom amount.
 
 void cPluginvdrTva::CheckChangedEvents()
 {
@@ -642,7 +642,11 @@ void cPluginvdrTva::CheckChangedEvents()
     const cChannel *channel = ti->Channel();
     const cSchedule *schedule = Schedules->GetSchedule(channel);
     if (schedule && ti->HasFlags(tfActive)) {
-      const cEvent *event = schedule->GetEvent(0, ti->StartTime());
+      time_t start_time = ti->StartTime();
+      if (!ti->HasFlags(tfVps)) {
+	start_time += Setup.MarginStart * 60;
+      }
+      const cEvent *event = schedule->GetEvent(0, start_time);
       const char *file = strrchr(ti->File(), '~');
       if (!file) file = ti->File();
       else file++;
