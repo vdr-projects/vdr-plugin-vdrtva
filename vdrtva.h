@@ -183,6 +183,7 @@ class cLinkItem : public cListObject {
 class cLinks : public cRwLock, public cConfig<cLinkItem> {
   private:
     int maxNumber;
+    bool dirty;
   public:
     cLinks(void);
     int MaxNumber(void) { return maxNumber; }
@@ -190,5 +191,5 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     void Load(void);
     void Save(void);
     bool DeleteItem(const char *sCRID);
-    bool Expire(void);
+    void Expire(void);
 };

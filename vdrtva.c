@@ -43,8 +43,8 @@ private:
   cTvaStatusMonitor *statusMonitor;
   bool AppendItems(const char* Option);
   bool AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title);
-  bool UpdateLinksFromTimers(void);
-  bool AddNewEventsToSeries(void);
+  void UpdateLinksFromTimers(void);
+  void AddNewEventsToSeries(void);
   bool CheckSplitTimers(void);
   bool CreateTimerFromEvent(const cEvent *event, char *Path);
   void CheckChangedEvents(void);
@@ -215,6 +215,7 @@ void cPluginvdrTva::Stop(void)
   }
   tvalog.MailLog();
   if(statusMonitor) delete statusMonitor;
+  if (Links) Links->Save();
 }
 
 void cPluginvdrTva::Housekeeping(void)
@@ -491,17 +492,16 @@ void cPluginvdrTva::Expire()
     SuggestCRIDs->Expire();
   }
   if (Links) {
-    if(Links->Expire()) {
-      Links->Save();
-    }
+    Links->Expire();
+    Links->Save();
   }
 }
 
 void cPluginvdrTva::Update()
 {
-  bool status = UpdateLinksFromTimers();
-  status |= AddNewEventsToSeries();
-  if(status) Links->Save();
+  UpdateLinksFromTimers();
+  AddNewEventsToSeries();
+  Links->Save();
   isyslog("vdrtva: Updates complete");
 }
 
@@ -554,10 +554,9 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char 
 
 // Check that all timers are part of series links and update the links.
 
-bool cPluginvdrTva::UpdateLinksFromTimers()
+void cPluginvdrTva::UpdateLinksFromTimers()
 {
-  if ((Timers.Count() == 0) || (!EventCRIDs)) return false;
-  bool status = false;
+  if ((Timers.Count() == 0) || (!EventCRIDs)) return;
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
 // find the event for this timer
     const cEvent *event = ti->Event();
@@ -576,25 +575,23 @@ bool cPluginvdrTva::UpdateLinksFromTimers()
 	if (char *p = strrchr(path, '~')) {
 	  *p = '\0';
 	  p++;
-	  status |= AddSeriesLink(scrid, event->StartTime(), icrid, path, p);
+	  AddSeriesLink(scrid, event->StartTime(), icrid, path, p);
 	}
-	else status |= AddSeriesLink(scrid, event->StartTime(), icrid, NULL, path);
+	else AddSeriesLink(scrid, event->StartTime(), icrid, NULL, path);
 	free (path);
       }
     }
   }
-  return status;
 }
 
 // Find new events for series links and create timers for them.
 
-bool cPluginvdrTva::AddNewEventsToSeries()
+void cPluginvdrTva::AddNewEventsToSeries()
 {
-  bool saveNeeded = false;
-  if (!Links || (Links->MaxNumber() < 1)) return false;
+  if (!Links || (Links->MaxNumber() < 1)) return;
   cSchedulesLock SchedulesLock;
   const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
-  if (!Schedules) return false;
+  if (!Schedules) return;
 // Foreach CRID
   for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
     cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
@@ -619,7 +616,6 @@ bool cPluginvdrTva::AddNewEventsToSeries()
 	      const cEvent *event = schedule->GetEvent(eventCRID->Eid());
 	      if (CreateTimerFromEvent(event, Item->Path())) {
 		AddSeriesLink(scrid, event->StartTime(), icrid, NULL, NULL);
-		saveNeeded = true;
 	      }
 	    }
 	  }
@@ -627,7 +623,6 @@ bool cPluginvdrTva::AddNewEventsToSeries()
       }
     }
   }
-  return saveNeeded;
 }
 
 // Check timers to see if the event they were set to record is still in the EPG.
@@ -1421,6 +1416,7 @@ void cLinkItem::SetIcrids(const char *icrids)
 cLinks::cLinks(void)
 {
   maxNumber = 0;
+  dirty = false;
 }
 
 cLinkItem *cLinks::NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *path, const char *title)
@@ -1428,6 +1424,7 @@ cLinkItem *cLinks::NewLinkItem(const char *sCRID, time_t ModTime, const char *iC
   cLinkItem *NewLinkItem = new cLinkItem(sCRID, ModTime, iCRIDs, path, title);
   Add(NewLinkItem);
   maxNumber++;
+  dirty = true;
   return NewLinkItem;
 }
 
@@ -1454,10 +1451,12 @@ void cLinks::Load()
     isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
   }
   else esyslog("vdrtva: series links file not found");
+  dirty = false;
 }
   
 void cLinks::Save()
 {
+  if (!dirty) return;
   cString curlinks = AddDirectory(configDir, "links.data");
   cString newlinks = AddDirectory(configDir, "links.new");
   cString oldlinks = AddDirectory(configDir, "links.old");
@@ -1478,6 +1477,7 @@ void cLinks::Save()
     unlink (oldlinks);		// Allow to fail if the save file does not exist
     rename (curlinks, oldlinks);
     rename (newlinks, curlinks);
+    dirty = false;
   }
 }
 
@@ -1490,6 +1490,7 @@ bool cLinks::DeleteItem(const char *sCRID)
     if (!strcmp(Item->sCRID(), sCRID)) {
       Del(Item);
       maxNumber--;
+      dirty = true;
       return true;
     }
     Item = next;
@@ -1497,10 +1498,9 @@ bool cLinks::DeleteItem(const char *sCRID)
   return false;
 }
 
-bool cLinks::Expire(void)
+void cLinks::Expire(void)
 {
-  bool status = false;
-  if (maxNumber == 0) return false;
+  if (maxNumber == 0) return;
   cLinkItem *Item = First();
   while (Item) {
     cLinkItem *next = Next(Item);
@@ -1508,11 +1508,10 @@ bool cLinks::Expire(void)
       isyslog ("vdrtva: Expiring series %s", Item->sCRID());
       Del(Item);
       maxNumber--;
-      status = true;
+      dirty = true;
     }
     Item = next;
   }
-  return status;
 }
 
 VDRPLUGINCREATOR(cPluginvdrTva); // Don't touch this!
