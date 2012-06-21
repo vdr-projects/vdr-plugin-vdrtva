@@ -17,13 +17,14 @@
 #define REPORT(a...) void( (tvalog.mailFrom()) ? tvalog.Append(a) : tvasyslog(a) )
 
 
-cChanDAs *ChanDAs;
-cEventCRIDs *EventCRIDs;
-cSuggestCRIDs *SuggestCRIDs;
-cLinks *Links;
+cChanDAs ChanDAs;
+cEventCRIDs EventCRIDs;
+cSuggestCRIDs SuggestCRIDs;
+cLinks Links;
+cTvaLog tvalog;
 char *configDir;
 
-static const char *VERSION        = "0.2.1";
+static const char *VERSION        = "0.2.2";
 static const char *DESCRIPTION    = "Series Record plugin";
 //static const char *MAINMENUENTRY  = "Series Links";
 
@@ -32,7 +33,7 @@ int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
-cTvaLog tvalog;
+bool captureComplete;		// Flag set if initial CRID capture has completed.
 
 
 class cPluginvdrTva : public cPlugin {
@@ -90,15 +91,12 @@ cPluginvdrTva::cPluginvdrTva(void)
   // VDR OBJECTS TO EXIST OR PRODUCE ANY OUTPUT!
   configDir = NULL;
   Filter = NULL;
-  ChanDAs = NULL;
-  EventCRIDs = NULL;
-  SuggestCRIDs = NULL;
-  Links = NULL;
   seriesLifetime = 30 * SECSINDAY;
   priority = 99;
   lifetime = 99;
   collectionperiod = 10 * 60;
   updatetime = 300;
+  captureComplete = false;
 }
 
 cPluginvdrTva::~cPluginvdrTva()
@@ -172,8 +170,7 @@ bool cPluginvdrTva::Start(void)
 {
   // Start any background activities the plugin shall perform.
   configDir = strcpyrealloc(configDir, cPlugin::ConfigDirectory("vdrtva"));
-  Links = new cLinks;
-  Links->Load();
+  Links.Load();
   statusMonitor = new cTvaStatusMonitor;
   if (tvalog.mailTo()) {
     struct stat sb;
@@ -202,7 +199,8 @@ bool cPluginvdrTva::Start(void)
       esyslog("vdrtva: no mail server found");
     }
   }
-  nextactiontime = time(NULL) + 300;		// Start CRID collection after 5 minutes
+  StartDataCapture();
+  nextactiontime = time(NULL) + collectionperiod;	// wait for CRIDs to be collected
   return true;
 }
 
@@ -215,7 +213,7 @@ void cPluginvdrTva::Stop(void)
   }
   tvalog.MailLog();
   if(statusMonitor) delete statusMonitor;
-  if (Links) Links->Save();
+  Links.Save();
 }
 
 void cPluginvdrTva::Housekeeping(void)
@@ -227,25 +225,21 @@ void cPluginvdrTva::Housekeeping(void)
     statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
     switch (state) {
       case 0:
-	StartDataCapture();
-	nextactiontime += collectionperiod;
-	state++;
-	break;
-      case 1:
+	captureComplete = true;
 	Expire();
 	Update();
 	state++;
 	break;
-      case 2:
+      case 1:
 	Check();
 	Report();
 	nextactiontime = NextUpdateTime();
-	state = 1;
+	state = 0;
 	tvalog.MailLog();
 	break;
     }
   }
-  else if (EventCRIDs && statusMonitor->GetTimerAddedDelta() > 60) {
+  else if (statusMonitor->GetTimerAddedDelta() > 60) {
     Update();			// Wait 1 minute for VDR to enter the event data into the new timer.
     Check();
     statusMonitor->ClearTimerAdded();
@@ -354,7 +348,8 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   cTvaLog reply;
   isyslog ("vdrtva: processing command %s", Command);
   if (strcasecmp(Command, "DELL") == 0) {
-    if (Links && Links->DeleteItem(Option)) {
+    if (!captureComplete) return cString::sprintf("Data capture still in progress");
+    if (Links.DeleteItem(Option)) {
       return cString::sprintf("Series %s deleted", Option);
     }
     else return cString::sprintf("Series %s not found in links file", Option);
@@ -365,9 +360,9 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     else return cString::sprintf("Nothing in the buffer!");
   }
   else if (strcasecmp(Command, "LSTL") == 0) {
-    if (Links && (Links->MaxNumber() >=1)) {
+    if (Links.MaxNumber() >=1) {
       ReplyCode = 250;
-      for (cLinkItem *linkItem = Links->First(); linkItem; linkItem = Links->Next(linkItem)) {
+      for (cLinkItem *linkItem = Links.First(); linkItem; linkItem = Links.Next(linkItem)) {
 	reply.Append("%s,%d;%s;%s;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs(), linkItem->Path(), linkItem->Title());
       }
     }
@@ -375,12 +370,13 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     else return cString::sprintf("Nothing in the buffer!");
   }
   else if (strcasecmp(Command, "LSTS") == 0) {
-    if (SuggestCRIDs && (SuggestCRIDs->MaxNumber() >= 1)) {
+    if (!captureComplete) return cString::sprintf("Data capture still in progress");
+    if (SuggestCRIDs.MaxNumber() >= 1) {
       ReplyCode = 250;
-      cSuggestCRID *suggest = SuggestCRIDs->First();
+      cSuggestCRID *suggest = SuggestCRIDs.First();
       while (suggest) {
-	cSuggestCRID *next = SuggestCRIDs->Next(suggest);
-	cChanDA *chanDA = ChanDAs->GetByChannelID(suggest->Cid());
+	cSuggestCRID *next = SuggestCRIDs.Next(suggest);
+	cChanDA *chanDA = ChanDAs.GetByChannelID(suggest->Cid());
 	if(chanDA) {
 	  reply.Append("%s%s %s%s\n", chanDA->DA(), suggest->iCRID(), chanDA->DA(), suggest->gCRID());
 	}
@@ -394,15 +390,14 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   }
   else if (strcasecmp(Command, "LSTT") == 0) {
     if (Timers.Count() == 0) return cString::sprintf("No timers defined");
-    if (!EventCRIDs) return cString::sprintf("No CRIDs available");
     Report();
     return cString::sprintf("Report generated");
   }
   else if (strcasecmp(Command, "LSTY") == 0) {
-    if (EventCRIDs && (EventCRIDs->MaxNumber() >= 1)) {
+    if (EventCRIDs.MaxNumber() >= 1) {
        ReplyCode = 250;
-       for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
-	  cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
+       for (cEventCRID *eventCRID = EventCRIDs.First(); eventCRID; eventCRID = EventCRIDs.Next(eventCRID)) {
+	  cChanDA *chanDA = ChanDAs.GetByChannelID(eventCRID->Cid());
 	  if(chanDA) {
             reply.Append("%d %d %s%s %s%s\n", chanDA->Cid(), eventCRID->Eid(), chanDA->DA(), eventCRID->iCRID(), chanDA->DA(), eventCRID->sCRID());
 	  }
@@ -414,9 +409,9 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
        return cString::sprintf("No events defined");
   }
   else if (strcasecmp(Command, "LSTZ") == 0) {
-    if (ChanDAs && (ChanDAs->MaxNumber() >= 1)) {
+    if (ChanDAs.MaxNumber() >= 1) {
        ReplyCode = 250;
-       for (cChanDA *chanDA = ChanDAs->First(); chanDA; chanDA = ChanDAs->Next(chanDA)) {
+       for (cChanDA *chanDA = ChanDAs.First(); chanDA; chanDA = ChanDAs.Next(chanDA)) {
           reply.Append("%d %s\n", chanDA->Cid(), chanDA->DA());
        }
 	if (reply.Length() > 0) return cString(reply.Buffer());
@@ -446,14 +441,14 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     }
   }
   else if (strcasecmp(Command, "UPDT") == 0) {
-    if (EventCRIDs) {
+    if (captureComplete) {
       Update();
       Check();
       return cString::sprintf("Update completed");
     }
     else {
       ReplyCode = 999;
-      return cString::sprintf("Update attempted before data capture");
+      return cString::sprintf("Data capture in progress");
     }
   }
   return NULL;
@@ -462,12 +457,6 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
 void cPluginvdrTva::StartDataCapture()
 {
   if (!Filter) {
-    if (EventCRIDs) delete EventCRIDs;
-    if (ChanDAs) delete ChanDAs;
-    if (SuggestCRIDs) delete SuggestCRIDs;
-    EventCRIDs = new cEventCRIDs();
-    SuggestCRIDs = new cSuggestCRIDs;
-    ChanDAs = new cChanDAs();
     Filter = new cTvaFilter();
     cDevice::ActualDevice()->AttachFilter(Filter);
     isyslog("vdrtva: Data capture started");
@@ -485,23 +474,18 @@ void cPluginvdrTva::StopDataCapture()
 
 void cPluginvdrTva::Expire()
 {
-  if (!EventCRIDs) return;
-  EventCRIDs->Expire();
-  if (SuggestCRIDs) {
-    SuggestCRIDs->DeDup();
-    SuggestCRIDs->Expire();
-  }
-  if (Links) {
-    Links->Expire();
-    Links->Save();
-  }
+  EventCRIDs.Expire();
+  SuggestCRIDs.DeDup();
+  SuggestCRIDs.Expire();
+  Links.Expire();
+  Links.Save();
 }
 
 void cPluginvdrTva::Update()
 {
   UpdateLinksFromTimers();
   AddNewEventsToSeries();
-  Links->Save();
+  Links.Save();
   isyslog("vdrtva: Updates complete");
 }
 
@@ -515,7 +499,7 @@ void cPluginvdrTva::Check()
 
 void cPluginvdrTva::Report()
 {
-  if ((Timers.Count() == 0) || (!EventCRIDs)) return;
+  if ((Timers.Count() == 0) || (!captureComplete)) return;
   REPORT(" \nTimers and Suggestions\n----------------------\n ");
   cTvaTimers tvatimers;
   for (cTvaTimerItem *ti = tvatimers.First(); ti; ti = tvatimers.Next(ti)) {
@@ -532,8 +516,8 @@ void cPluginvdrTva::Report()
 
 bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title)
 {
-  if (Links && (Links->MaxNumber() >=1)) {
-    for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
+  if (Links.MaxNumber() >=1) {
+    for (cLinkItem *Item = Links.First(); Item; Item = Links.Next(Item)) {
       if (strcasecmp(Item->sCRID(), scrid) == 0) {
 	if (strstr(Item->iCRIDs(), icrid) == NULL) {
 	  cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
@@ -547,7 +531,7 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char 
       }
     }
   }
-  Links->NewLinkItem(scrid, modtime, icrid, path, title);
+  Links.NewLinkItem(scrid, modtime, icrid, path, title);
   isyslog("vdrtva: Creating new series %s for event %s (%s)", scrid, icrid, title);
   return true;
 }
@@ -556,15 +540,15 @@ bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char 
 
 void cPluginvdrTva::UpdateLinksFromTimers()
 {
-  if ((Timers.Count() == 0) || (!EventCRIDs)) return;
+  if ((Timers.Count() == 0) || (!captureComplete)) return;
   for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
 // find the event for this timer
     const cEvent *event = ti->Event();
     if (event && ti->HasFlags(tfActive) && (ti->WeekDays() == 0)) {
       cChannel *channel = Channels.GetByChannelID(event->ChannelID());
 // find the sCRID and iCRID for the event
-      cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-      cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+      cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
       if (eventcrid && chanda) {
 	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
 	cString icrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->iCRID());
@@ -588,22 +572,22 @@ void cPluginvdrTva::UpdateLinksFromTimers()
 
 void cPluginvdrTva::AddNewEventsToSeries()
 {
-  if (!Links || (Links->MaxNumber() < 1)) return;
+  if (Links.MaxNumber() < 1) return;
   cSchedulesLock SchedulesLock;
   const cSchedules *Schedules = cSchedules::Schedules(SchedulesLock);
   if (!Schedules) return;
 // Foreach CRID
-  for (cEventCRID *eventCRID = EventCRIDs->First(); eventCRID; eventCRID = EventCRIDs->Next(eventCRID)) {
-    cChanDA *chanDA = ChanDAs->GetByChannelID(eventCRID->Cid());
+  for (cEventCRID *eventCRID = EventCRIDs.First(); eventCRID; eventCRID = EventCRIDs.Next(eventCRID)) {
+    cChanDA *chanDA = ChanDAs.GetByChannelID(eventCRID->Cid());
     if (chanDA) {
 // Check for an entry in the Links table with the same sCRID
       cString scrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->sCRID());
-      for (cLinkItem *Item = Links->First(); Item; Item = Links->Next(Item)) {
+      for (cLinkItem *Item = Links.First(); Item; Item = Links.Next(Item)) {
 	if (strcasecmp(Item->sCRID(), scrid) == 0) {
 // if found, look for the event's icrid in ALL series
 	  cString icrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->iCRID());
 	  bool done = false;
-	  for (cLinkItem *Item2 = Links->First(); Item2; Item2 = Links->Next(Item2)) {
+	  for (cLinkItem *Item2 = Links.First(); Item2; Item2 = Links.Next(Item2)) {
 	    if (strstr(Item2->iCRIDs(), icrid) != NULL) {
 	      done = true;
 	    }
@@ -691,8 +675,8 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
     return;
   }
   cChannel *channel = Channels.GetByChannelID(event->ChannelID());
-  cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-  cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+  cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+  cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
   cSchedulesLock SchedulesLock;
   const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (!eventcrid || !chanda) {
@@ -700,31 +684,35 @@ void cPluginvdrTva::FindAlternatives(const cEvent *event)
     return;
   }
   bool found = false;
-  for (cEventCRID *eventcrid2 = EventCRIDs->First(); eventcrid2; eventcrid2 = EventCRIDs->Next(eventcrid2)) {
+  for (cEventCRID *eventcrid2 = EventCRIDs.First(); eventcrid2; eventcrid2 = EventCRIDs.Next(eventcrid2)) {
     if ((strcmp(eventcrid->iCRID(), eventcrid2->iCRID()) == 0) && (event->EventID() != eventcrid2->Eid())) {
-      cChanDA *chanda2 = ChanDAs->GetByChannelID(eventcrid2->Cid());
+      cChanDA *chanda2 = ChanDAs.GetByChannelID(eventcrid2->Cid());
       if (strcmp(chanda->DA(), chanda2->DA()) == 0) {
 	cChannel *channel2 = Channels.GetByNumber(eventcrid2->Cid());
 	const cSchedule *schedule = schedules->GetSchedule(channel2);
 	if (schedule) {
 	  const cEvent *event2 = schedule->GetEvent(eventcrid2->Eid(), 0);
-	  if (!found) {
-	    REPORT("Alternatives for '%s':", event->Title());
-	    found = true;
-	  }
-	  bool clash = false;
-	  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
-	    if((ti->StartTime() >= event2->StartTime() && ti->StartTime() < event2->EndTime())
-	    ||(event2->StartTime() >= ti->StartTime() && event2->StartTime() < ti->StopTime())) {
-	      cChannel *channel = Channels.GetByChannelID(event2->ChannelID());
-	      if (ti->Channel()->Transponder() != channel->Transponder()) {
-		REPORT("  %s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), ti->File());
-		clash = true;
+	  if (event2) {
+	    if (!found) {
+	      REPORT("Alternatives for '%s':", event->Title());
+	      found = true;
+	    }
+	    bool clash = false;
+	    for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
+	      if((ti->StartTime() >= event2->StartTime() && ti->StartTime() < event2->EndTime())
+	      ||(event2->StartTime() >= ti->StartTime() && event2->StartTime() < ti->StopTime())) {
+		if (ti->Channel()->Transponder() != channel2->Transponder()) {
+		  const char *file = strrchr(ti->File(), '~');
+		  if (!file) file = ti->File();
+		  else file++;
+		  REPORT("  %s %s (clash with timer '%s')", channel2->Name(), *DayDateTime(event2->StartTime()), file);
+		  clash = true;
+		}
 	      }
 	    }
-	  }
-	  if (!clash) {
-	    REPORT("  %s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
+	    if (!clash) {
+	      REPORT("  %s %s", channel2->Name(), *DayDateTime(event2->StartTime()));
+	    }
 	  }
 	}
       }
@@ -744,8 +732,8 @@ bool cPluginvdrTva::CheckSplitTimers(void)
     const cEvent *event = ti->Event();
     if (event && ti->HasFlags(tfActive)) {
       cChannel *channel = Channels.GetByChannelID(event->ChannelID());
-      cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-      cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+      cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
       if (eventcrid && chanda && strchr(eventcrid->iCRID(), '#')) {
 //	  char crid[Utf8BufSize(256)], *next;
 //	  strcpy(crid, eventcrid->iCRID());
@@ -806,16 +794,16 @@ void cPluginvdrTva::FindSuggestions(const cEvent *event)
 {
   bool found = false;
   cChannel *channel = Channels.GetByChannelID(event->ChannelID());
-  cChanDA *chanda = ChanDAs->GetByChannelID(channel->Number());
-  cEventCRID *eventcrid = EventCRIDs->GetByID(channel->Number(), event->EventID());
+  cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+  cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
   cSchedulesLock SchedulesLock;
   const cSchedules *schedules = cSchedules::Schedules(SchedulesLock);
   if (eventcrid && chanda && schedules) {
-    for (cSuggestCRID *suggestcrid = SuggestCRIDs->First(); suggestcrid; suggestcrid = SuggestCRIDs->Next(suggestcrid)) {
+    for (cSuggestCRID *suggestcrid = SuggestCRIDs.First(); suggestcrid; suggestcrid = SuggestCRIDs.Next(suggestcrid)) {
       if((channel->Number() == suggestcrid->Cid()) && (!strcmp(suggestcrid->iCRID(), eventcrid->iCRID()))) {
-	for (cEventCRID *ecrid2 = EventCRIDs->First(); ecrid2; ecrid2 = EventCRIDs->Next(ecrid2)) {
+	for (cEventCRID *ecrid2 = EventCRIDs.First(); ecrid2; ecrid2 = EventCRIDs.Next(ecrid2)) {
 	  if (!strcmp(suggestcrid->gCRID(), ecrid2->iCRID())) {
-	    cChanDA *chanda2 = ChanDAs->GetByChannelID(ecrid2->Cid());
+	    cChanDA *chanda2 = ChanDAs.GetByChannelID(ecrid2->Cid());
 	    if (!strcmp(chanda->DA(), chanda2->DA())) {
 	      cChannel *channel2 = Channels.GetByNumber(ecrid2->Cid());
 	      const cSchedule *schedule = schedules->GetSchedule(channel2);
@@ -1074,7 +1062,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
       for (SI::Loop::Iterator it; sdt.serviceLoop.getNext(SiSdtService, it); ) {
 	cChannel *chan = Channels.GetByChannelID(tChannelID(Source(),sdt.getOriginalNetworkId(),sdt.getTransportStreamId(),SiSdtService.getServiceId()));
 	if (chan) {
-	  cChanDA *chanDA = ChanDAs->GetByChannelID(chan->Number());
+	  cChanDA *chanDA = ChanDAs.GetByChannelID(chan->Number());
 	  if (!chanDA) {
 	    SI::Descriptor *d;
 	    for (SI::Loop::Iterator it2; (d = SiSdtService.serviceDescriptors.getNext(it2)); ) {
@@ -1083,7 +1071,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 		  SI::DefaultAuthorityDescriptor *da = (SI::DefaultAuthorityDescriptor *)d;
 		  char DaBuf[Utf8BufSize(1024)];
 		  da->DefaultAuthority.getText(DaBuf, sizeof(DaBuf));
-		  chanDA = ChanDAs->NewChanDA(chan->Number(), DaBuf);
+		  chanDA = ChanDAs.NewChanDA(chan->Number(), DaBuf);
 		}
 		break;
 	      default: ;
@@ -1109,7 +1097,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 	}
 	SI::EIT::Event SiEitEvent;
         for (SI::Loop::Iterator it; eit.eventLoop.getNext(SiEitEvent, it); ) {
-          cEventCRID *eventCRID = EventCRIDs->GetByID(chan->Number(), SiEitEvent.getEventId());
+          cEventCRID *eventCRID = EventCRIDs.GetByID(chan->Number(), SiEitEvent.getEventId());
           if (!eventCRID) {
             SI::Descriptor *d;
             char iCRIDBuf[Utf8BufSize(256)] = {'\0'}, sCRIDBuf[Utf8BufSize(256)] = {'\0'}, gCRIDBuf[Utf8BufSize(256)] = {'\0'};
@@ -1135,7 +1123,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 			case 0x03:
 			case 0x33:
 			  cde.identifier.getText(gCRIDBuf, sizeof(gCRIDBuf));		// FIXME Rashly assuming that 0x31 & 0x32 CRIDs will always precede a 0x33 CRID.
-			  if (iCRIDBuf[0] && sCRIDBuf[0]) SuggestCRIDs->NewSuggestCRID(chan->Number(), iCRIDBuf, gCRIDBuf);
+			  if (iCRIDBuf[0] && sCRIDBuf[0]) SuggestCRIDs.NewSuggestCRID(chan->Number(), iCRIDBuf, gCRIDBuf);
 		      }
                     }
                     else {
@@ -1149,7 +1137,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
               delete d;
             }
             if (iCRIDBuf[0] && sCRIDBuf[0]) {	// Only log events which are part of a series.
-              eventCRID = EventCRIDs->NewEventCRID(chan->Number(), SiEitEvent.getEventId(), iCRIDBuf, sCRIDBuf);
+              eventCRID = EventCRIDs.NewEventCRID(chan->Number(), SiEitEvent.getEventId(), iCRIDBuf, sCRIDBuf);
             }
 	  }
         }
@@ -1361,7 +1349,7 @@ void cSuggestCRIDs::Expire(void) {
   while (suggest) {
     cSuggestCRID *next = Next(suggest);
     bool found = false;
-    for (cEventCRID *crid = EventCRIDs->First(); crid; crid = EventCRIDs->Next(crid)) {
+    for (cEventCRID *crid = EventCRIDs.First(); crid; crid = EventCRIDs.Next(crid)) {
       if (!strcmp(suggest->iCRID(), crid->iCRID())) {
 	found = true;
 	break;
@@ -1402,11 +1390,13 @@ cLinkItem::~cLinkItem(void)
 void cLinkItem::SetModtime(time_t ModTime)
 {
   modtime = ModTime;
+  Links.SetUpdated();
 }
 
 void cLinkItem::SetIcrids(const char *icrids)
 {
   iCrids = strcpyrealloc(iCrids, icrids);
+  Links.SetUpdated();
 }
 
 /*
@@ -1448,7 +1438,7 @@ void cLinks::Load()
       NewLinkItem(scrid, modtime, icrids, path, title);
     }
     fclose (f);
-    isyslog("vdrtva: loaded %d series links", Links->MaxNumber());
+    isyslog("vdrtva: loaded %d series links", MaxNumber());
   }
   else esyslog("vdrtva: series links file not found");
   dirty = false;
@@ -1478,6 +1468,7 @@ void cLinks::Save()
     rename (curlinks, oldlinks);
     rename (newlinks, curlinks);
     dirty = false;
+    isyslog("vdrtva: saved series links file");
   }
 }
 
@@ -1513,5 +1504,11 @@ void cLinks::Expire(void)
     Item = next;
   }
 }
+
+void cLinks::SetUpdated(void)
+{
+  dirty = true;
+}
+
 
 VDRPLUGINCREATOR(cPluginvdrTva); // Don't touch this!

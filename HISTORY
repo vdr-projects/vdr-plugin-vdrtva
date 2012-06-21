@@ -65,3 +65,9 @@ VDR Plugin 'vdrtva' Revision History
 - Add patch for latest VDR version (1.7.27).
 - Include series title in links file.
 - Included format of links file in README.
+
+2012-06-20: Version 0.2.2
+- Update VPS patch for VDR 1.7.28.
+- Check for changed events now works without VPS.
+- Start CRID data collection at VDR startup.
+- Inhibit some functions if initial CRID capture still in progress.

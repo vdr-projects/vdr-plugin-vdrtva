@@ -192,4 +192,5 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     void Save(void);
     bool DeleteItem(const char *sCRID);
     void Expire(void);
+    void SetUpdated(void);
 };
