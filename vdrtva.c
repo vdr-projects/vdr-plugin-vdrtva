@@ -34,6 +34,7 @@ int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
 bool captureComplete;		// Flag set if initial CRID capture has completed.
+time_t startTime;		// Time the plugin was initialised.
 
 
 class cPluginvdrTva : public cPlugin {
@@ -97,6 +98,7 @@ cPluginvdrTva::cPluginvdrTva(void)
   collectionperiod = 10 * 60;
   updatetime = 300;
   captureComplete = false;
+  startTime = time(NULL);
 }
 
 cPluginvdrTva::~cPluginvdrTva()
@@ -199,8 +201,7 @@ bool cPluginvdrTva::Start(void)
       esyslog("vdrtva: no mail server found");
     }
   }
-  StartDataCapture();
-  nextactiontime = time(NULL) + collectionperiod;	// wait for CRIDs to be collected
+  nextactiontime = time(NULL) + collectionperiod + 1;	// wait for CRIDs to be collected
   return true;
 }
 
@@ -225,7 +226,6 @@ void cPluginvdrTva::Housekeeping(void)
     statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
     switch (state) {
       case 0:
-	captureComplete = true;
 	Expire();
 	Update();
 	state++;
@@ -269,6 +269,16 @@ void cPluginvdrTva::MainThreadHook(void)
 {
   // Perform actions in the context of the main program thread.
   // WARNING: Use with great care - see PLUGINS.html!
+  
+  static bool running = false;
+
+  if (!running && (time(NULL) - startTime > 5)) {
+    StartDataCapture();
+    running = true;
+  }
+  if (!captureComplete && (time(NULL) - startTime > collectionperiod)) {
+    captureComplete = true;
+  }
 }
 
 cString cPluginvdrTva::Active(void)
