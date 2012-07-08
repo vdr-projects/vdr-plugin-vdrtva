@@ -94,21 +94,25 @@ address daily.
 The plugin has an SVDRP interface which is mainly used for debugging, but could
 be used to interface with other applications. The commands are:
 
-LLOG	Print the pending log report
+DELL <sCrid>	Delete a series link and any timers by series CRID
 
-LSTL	Print the series links list
+LLOG		Print the pending log report
 
-LSTS	Print the 'suggested' events list
+LSTL		Print the series links list
 
-LSTY	Print the CRIDs for each event
+LSTS		Print the 'suggested' events list
 
-LSTZ	Print the Default Authority data for each channel
+LSTY		Print the CRIDs for each event
 
-STOP	Start and stop CRID data capture
+LSTZ		Print the Default Authority data for each channel
+
+STOP		Start and stop CRID data capture
 STRT
 
-UPDT	Trigger an update of the series links.
+UPDT		Trigger an update of the series links.
 
+
+Files
 
 The plugin stores details of series links in the file links.data which is in the
 VIDEODIR/plugins directory. Entries in this file have the format:

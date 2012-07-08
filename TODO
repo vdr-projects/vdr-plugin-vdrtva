@@ -16,6 +16,8 @@ OSD for managing series links (work in progress).
 
 Option to select which device to use for CRID collection.
 
+Remove reliance on VDR "Housekeeping" callback - causes problems when VDR is busy.
+
 Bugs:
 	Very rare crash 'pure virtual method called' in plugin - possibly solved. 
 	Spurious timer clash report - seen once, cause unknown.

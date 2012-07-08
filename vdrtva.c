@@ -1489,6 +1489,7 @@ bool cLinks::DeleteItem(const char *sCRID)
   while (Item) {
     cLinkItem *next = Next(Item);
     if (!strcmp(Item->sCRID(), sCRID)) {
+      DeleteTimersForSCRID(sCRID);
       Del(Item);
       maxNumber--;
       dirty = true;
@@ -1497,6 +1498,29 @@ bool cLinks::DeleteItem(const char *sCRID)
     Item = next;
   }
   return false;
+}
+
+void cLinks::DeleteTimersForSCRID(const char *sCRID)
+{
+  if ((Timers.Count() == 0) || (!captureComplete)) return;
+  cTimer *ti = Timers.First();
+  while (ti) {
+    cTimer *next = Timers.Next(ti);
+    const cEvent *event = ti->Event();
+    if (event && ti->HasFlags(tfActive) && (ti->WeekDays() == 0)) {
+      cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+      cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
+      if (eventcrid && chanda) {
+	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
+	if (!strcmp(scrid, sCRID)) {
+	  isyslog ("vdrtva: deleting timer '%s' from deleted series %s", ti->File(), sCRID);
+	  Timers.Del(ti);
+	}
+      }
+    }
+    ti = next;
+  }
 }
 
 void cLinks::Expire(void)

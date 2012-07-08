@@ -193,4 +193,5 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     bool DeleteItem(const char *sCRID);
     void Expire(void);
     void SetUpdated(void);
+    void DeleteTimersForSCRID(const char *sCRID);
 };
