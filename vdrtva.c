@@ -1514,8 +1514,12 @@ void cLinks::DeleteTimersForSCRID(const char *sCRID)
       if (eventcrid && chanda) {
 	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
 	if (!strcmp(scrid, sCRID)) {
-	  isyslog ("vdrtva: deleting timer '%s' from deleted series %s", ti->File(), sCRID);
-	  Timers.Del(ti);
+          if (!ti->Recording()) {
+	    isyslog ("vdrtva: deleting timer '%s' from deleted series %s", ti->File(), sCRID);
+	    Timers.Del(ti);
+	    Timers.SetModified();
+	  }
+	  else esyslog("vdrtva: cannot delete timer '%s': timer is recording", ti->File());
 	}
       }
     }
