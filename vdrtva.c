@@ -1165,7 +1165,8 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 cChanDA::cChanDA(int Cid, char *DA)
 {
   cid = Cid; 
-  defaultAuthority = strcpyrealloc(NULL, DA);
+  if (startswith(DA, "crid://")) defaultAuthority = strcpyrealloc(NULL, &DA[7]);
+  else defaultAuthority = strcpyrealloc(NULL, DA);
 }
 
 cChanDA::~cChanDA(void)
