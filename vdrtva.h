@@ -1,6 +1,9 @@
 #include <vdr/filter.h>
 #include <vdr/device.h>
 #include <vdr/status.h>
+#include <vdr/interface.h>
+#include <vdr/menu.h>
+
 
 class cTvaFilter : public cFilter {
 private:
@@ -62,22 +65,6 @@ class cTvaLog {
     const char * mailTo() { return mailto; }
     void setmailFrom(char *opt);
     const char * mailFrom() { return mailfrom; }
-};
-
-
-class cTvaTimerItem : public cListObject {
-private:
-  cTimer *timer;
-public:
-  cTvaTimerItem(cTimer *Timer);
-  virtual int Compare(const cListObject &ListObject) const;
-  cTimer *Timer(void) { return timer; }
-};
-
-
-class cTvaTimers : public cConfig<cTvaTimerItem> {
-public:
-  cTvaTimers(void);
 };
 
 
@@ -195,3 +182,36 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     void SetUpdated(void);
     void DeleteTimersForSCRID(const char *sCRID);
 };
+
+
+class cMenuLinks : public cOsdMenu {
+private:
+  void Propagate(void);
+  eOSState Delete(void);
+  eOSState Info(void);
+public:
+  cMenuLinks(void);
+  virtual eOSState ProcessKey(eKeys Key);
+};
+
+class cMenuLinkItem : public cOsdItem {
+private:
+  cLinkItem *linkitem;
+public:
+  cMenuLinkItem(cLinkItem *LinkItem);
+  char * sCRID(void) { return linkitem->sCRID(); }
+  cLinkItem * LinkItem(void) { return linkitem; }
+  int TimerCount(void);
+  virtual void Set(void);
+  virtual int Compare(const cListObject &ListObject) const;
+};
+
+#if VDRVERSNUM < 10728
+
+// Copied from timers.c v1.7.29
+
+class cSortedTimers : public cVector<const cTimer *> {
+public:
+  cSortedTimers(void);
+  };
+#endif

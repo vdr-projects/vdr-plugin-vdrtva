@@ -102,6 +102,8 @@ LSTL		Print the series links list
 
 LSTS		Print the 'suggested' events list
 
+LSTT		Print the list of timers with suggestions for each event
+
 LSTY		Print the CRIDs for each event
 
 LSTZ		Print the Default Authority data for each channel
@@ -112,15 +114,27 @@ STRT
 UPDT		Trigger an update of the series links.
 
 
+OSD
+
+The plugin adds an entry to the VDR Main Menu called "Series Links". This shows 
+the title of the first programme in the series and the date (DD.MM) of the most
+recent timer - if the series is still running this date will usually be in the 
+future. From this menu you can view further information on a selected series, or
+delete a series together with any remaining timers.
+
+The configuration settings described above can also be set using the "Setup" 
+menu in the OSD.
+
+
 Files
 
 The plugin stores details of series links in the file links.data which is in the
-VIDEODIR/plugins directory. Entries in this file have the format:
+VIDEODIR/plugins/vdrtva directory. Entries in this file have the format:
 
 <scrid>,<modtime>;<icrids>;<path>;<title>
 
 scrid	The series CRID.
-modtime	The start time of the last event in this series.
+modtime	The start time of the latest event in this series.
 icrids	The CRIDS of the events in the series, separated by colons.
 path	The subdirectory to store recordings in this series, taken from the first 
 	timer, or the string (NULL) if no subdirectory was given.
@@ -142,7 +156,7 @@ Points to remember:
 - A series link is created for every timer whether you want one or not.
 
 - This plugin has not been tested with multiple tuner cards or with mixed DVB-T
-  and DVB-S setups.
+  and DVB-S setups. It will try to collect CRID data from the Primary DVB device.
 
 - The 'suggested' events list may have CRIDs which do not appear in the events
   list.

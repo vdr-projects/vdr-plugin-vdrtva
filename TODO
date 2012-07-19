@@ -12,8 +12,6 @@ Delete a series link if the only timer is manually deleted.
 
 Display suggestions for timers which don't have series CRIDs.
 
-OSD for managing series links (work in progress).
-
 Option to select which device to use for CRID collection.
 
 Remove reliance on VDR "Housekeeping" callback - causes problems when VDR is busy.

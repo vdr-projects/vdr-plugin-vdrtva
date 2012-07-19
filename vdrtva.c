@@ -24,9 +24,9 @@ cLinks Links;
 cTvaLog tvalog;
 char *configDir;
 
-static const char *VERSION        = "0.2.2";
+static const char *VERSION        = "0.3.0";
 static const char *DESCRIPTION    = "Series Record plugin";
-//static const char *MAINMENUENTRY  = "Series Links";
+static const char *MAINMENUENTRY  = "Series Links";
 
 int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
 int lifetime;			// Lifetime of series link recordings (default 99)
@@ -35,7 +35,6 @@ int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
 bool captureComplete;		// Flag set if initial CRID capture has completed.
 time_t startTime;		// Time the plugin was initialised.
-
 
 class cPluginvdrTva : public cPlugin {
 private:
@@ -76,7 +75,7 @@ public:
   virtual void MainThreadHook(void);
   virtual cString Active(void);
   virtual time_t WakeupTime(void);
-//  virtual const char *MainMenuEntry(void) { return tr(MAINMENUENTRY); }
+  virtual const char *MainMenuEntry(void) { return tr(MAINMENUENTRY); }
   virtual cOsdObject *MainMenuAction(void);
   virtual cMenuSetupPage *SetupMenu(void);
   virtual bool SetupParse(const char *Name, const char *Value);
@@ -296,7 +295,7 @@ time_t cPluginvdrTva::WakeupTime(void)
 cOsdObject *cPluginvdrTva::MainMenuAction(void)
 {
   // Perform the action when selected from the main VDR menu.
-  return NULL;
+  return new cMenuLinks;
 }
 
 cMenuSetupPage *cPluginvdrTva::SetupMenu(void)
@@ -511,12 +510,14 @@ void cPluginvdrTva::Report()
 {
   if ((Timers.Count() == 0) || (!captureComplete)) return;
   REPORT(" \nTimers and Suggestions\n----------------------\n ");
-  cTvaTimers tvatimers;
-  for (cTvaTimerItem *ti = tvatimers.First(); ti; ti = tvatimers.Next(ti)) {
-    const cEvent *event = ti->Timer()->Event();
-    if (event && ti->Timer()->HasFlags(tfActive)) {
-      REPORT("'%s' (%s %s)", event->Title(), ti->Timer()->Channel()->Name(), *DayDateTime(event->StartTime()));
-      FindSuggestions(event);
+  cSortedTimers SortedTimers;
+  for (int i = 0; i < SortedTimers.Size(); i++) {
+    if (const cTimer *ti = SortedTimers[i]) {
+      const cEvent *event = ti->Event();
+      if (event && ti->HasFlags(tfActive)) {
+        REPORT("'%s' (%s %s)", event->Title(), ti->Channel()->Name(), *DayDateTime(event->StartTime()));
+        FindSuggestions(event);
+      }
     }
   }
 }
@@ -1006,37 +1007,6 @@ char mailcmd[256];
   fputs(buffer, mail);
   pclose(mail);
   Clear();
-}
-
-
-/*
-	cTvaTimerItem - the things we need to do just to list the timers in order...
-*/
-
-
-cTvaTimerItem::cTvaTimerItem(cTimer *Timer)
-{
-  timer = Timer;
-}
-
-int cTvaTimerItem::Compare(const cListObject &ListObject) const
-{
-  return timer->Compare(*((cTvaTimerItem *)&ListObject)->timer);
-}
-
-
-/*
-	cTvaTimers
-*/
-
-
-cTvaTimers::cTvaTimers(void)
-{
-  for (cTimer *timer = Timers.First(); timer; timer = Timers.Next(timer)) {
-//      timer->SetEventFromSchedule(); // make sure the event is current
-    Add(new cTvaTimerItem(timer));
-  }
-  Sort();
 }
 
 
@@ -1549,5 +1519,176 @@ void cLinks::SetUpdated(void)
   dirty = true;
 }
 
+
+
+/*
+	cMenuLinkItem - Series Link OSD menu item
+*/
+
+cMenuLinkItem::cMenuLinkItem(cLinkItem *LinkItem)
+{
+  linkitem = LinkItem;
+  Set();
+}
+
+
+void cMenuLinkItem::Set(void)
+{
+  cString buffer;
+  char tim[32];
+  struct tm tm_r;
+  time_t t = linkitem->ModTime();
+  tm *tm = localtime_r(&t, &tm_r);
+  strftime(tim, sizeof(tim), "%d.%m", tm);
+  if (linkitem->Title()) {
+    buffer = cString::sprintf("%s\t%s", tim, linkitem->Title());
+  }
+  else {
+    buffer = cString::sprintf("%s\t(No Title)", tim);
+  }
+  SetText(buffer);
+}
+
+int cMenuLinkItem::Compare(const cListObject &ListObject) const
+{
+  cMenuLinkItem *p = (cMenuLinkItem *)&ListObject;
+  return linkitem->ModTime() - p->linkitem->ModTime();
+}
+
+//	How many active timers are there for this series?
+
+int cMenuLinkItem::TimerCount(void) {
+  int count = 0;
+  if ((Timers.Count() == 0) || (!captureComplete)) return 99;
+  for (cTimer *ti = Timers.First(); ti; ti = Timers.Next(ti)) {
+    const cEvent *event = ti->Event();
+    if (event && ti->HasFlags(tfActive) && (ti->WeekDays() == 0)) {
+      cChannel *channel = Channels.GetByChannelID(event->ChannelID());
+      cChanDA *chanda = ChanDAs.GetByChannelID(channel->Number());
+      cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
+      if (eventcrid && chanda) {
+	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
+	if (!strcmp(scrid, sCRID())) count++;
+      }
+    }
+  }
+  return count;
+}
+
+
+/*
+	cMenuLinks - Series Link OSD menu
+*/
+
+cMenuLinks::cMenuLinks(void):cOsdMenu(tr("Series Links"), 6)
+{
+  Clear();
+  for (cLinkItem *LinkItem = Links.First(); LinkItem; LinkItem = Links.Next(LinkItem)) {
+    cMenuLinkItem *item = new cMenuLinkItem(LinkItem);
+    Add(item);
+  }
+  Sort();
+  SetHelp(tr("Delete"), tr("Info"), tr(""), tr(""));
+  Display();
+}
+
+void cMenuLinks::Propagate(void)
+{
+  for (cMenuLinkItem *ci = (cMenuLinkItem *)First(); ci; ci = (cMenuLinkItem *)ci->Next())
+      ci->Set();
+  Display();
+}
+
+eOSState cMenuLinks::ProcessKey(eKeys Key)
+{
+  eOSState state = cOsdMenu::ProcessKey(Key);
+
+  if (state == osUnknown) {
+     switch (Key) {
+       case kRed:	return Delete();
+       case kGreen:	return Info();
+       case kYellow:
+       case kBlue:
+       case kOk:
+       default:      state = osContinue;
+       }
+     }
+  return state;
+}
+
+eOSState cMenuLinks::Delete(void)
+{
+  if (HasSubMenu() || Count() == 0) return osContinue;
+  if (!captureComplete) {
+    Skins.Message(mtError, tr("Data capture still in progress"));
+    return osContinue;
+  }
+  int Index = Current();
+  cMenuLinkItem *item = (cMenuLinkItem *)Get(Index);
+  int timercount = item->TimerCount();
+  cString prompt;
+  if (timercount > 1) {
+    prompt = cString::sprintf(tr("Delete series link & %d timers?"), timercount);
+  }
+  else if (timercount == 1) {
+    prompt = cString::sprintf(tr("Delete series link & 1 timer?"));
+  }
+  else {
+    prompt = cString::sprintf(tr("Delete series link?"));
+  }
+  if (Interface->Confirm(prompt)) {
+    char *linkCRID = item->sCRID();
+    cOsdMenu::Del(Index);
+    Propagate();
+    isyslog("vdrtva: series link %s deleted by OSD", linkCRID);
+    Links.DeleteItem(linkCRID);
+  }
+  return osContinue;
+}
+
+eOSState cMenuLinks::Info(void)
+{
+  if (HasSubMenu() || Count() == 0) return osContinue;
+  if (!captureComplete) {
+    Skins.Message(mtError, tr("Data capture still in progress"));
+    return osContinue;
+  }
+  int Index = Current();
+  cMenuLinkItem *menuitem = (cMenuLinkItem *)Get(Index);
+  cLinkItem *linkitem = menuitem->LinkItem();
+  char *icrids = linkitem->iCRIDs();
+  int eventcount = 1;
+  while (icrids = strchr(icrids, ':')) {
+    eventcount++;
+    icrids++;
+  }
+  cString message = cString::sprintf("Series CRID:      %s\nTotal Events:    %d\nActive Timers:   %d", 
+				menuitem->sCRID(), eventcount, menuitem->TimerCount());
+  if (linkitem->Title()) {
+    return AddSubMenu(new cMenuText(linkitem->Title(), message, fontOsd));
+  }
+  else {
+    return AddSubMenu(new cMenuText(tr("(No Title)"), message, fontOsd));
+  }
+}
+
+
+#if VDRVERSNUM < 10728
+
+// --- cSortedTimers (copied from timers.c v1.7.29) ---
+
+static int CompareTimers(const void *a, const void *b)
+{
+  return (*(const cTimer **)a)->Compare(**(const cTimer **)b);
+}
+
+cSortedTimers::cSortedTimers(void)
+:cVector<const cTimer *>(Timers.Count())
+{
+  for (const cTimer *Timer = Timers.First(); Timer; Timer = Timers.Next(Timer))
+      Append(Timer);
+  Sort(CompareTimers);
+}
+#endif
 
 VDRPLUGINCREATOR(cPluginvdrTva); // Don't touch this!

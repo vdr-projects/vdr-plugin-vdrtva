@@ -71,3 +71,12 @@ VDR Plugin 'vdrtva' Revision History
 - Check for changed events now works without VPS.
 - Start CRID data collection at VDR startup.
 - Inhibit some functions if initial CRID capture still in progress.
+
+2012-07-19: Version 0.3.0
+- Manage series links via OSD.
+- Delay CRID collection a few seconds to allow other plugins to start.
+- Don't use "housekeeping" hook to trigger time-sensitive tasks.
+- Deleting a series link now deletes any timers for the series.
+- Remove leading 'crid://' from Default Authority if found (corrupts links file).
+- Use builtin VDR function to sort timers, if available.
+- Update VPS patch for VDR 1.7.29.
