@@ -760,6 +760,10 @@ bool cPluginvdrTva::CheckSplitTimers(void)
 // Create a timer from an event, setting VPS parameter explicitly.
 
 bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event, char *Path) {
+  if (!event) {
+    dsyslog("vdrtva: CreateTimerFromEvent() called without Event!");
+    return false;
+  }
   struct tm tm_r;
   char startbuff[64], endbuff[64], etitle[256];
   int flags = tfActive;
