@@ -33,6 +33,7 @@ int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
+bool checkCollisions;		// Whether to test for collisions (assuming single DVB card)
 bool captureComplete;		// Flag set if initial CRID capture has completed.
 time_t startTime;		// Time the plugin was initialised.
 
@@ -97,6 +98,7 @@ cPluginvdrTva::cPluginvdrTva(void)
   collectionperiod = 10 * 60;
   updatetime = 300;
   captureComplete = false;
+  checkCollisions = true;
   startTime = time(NULL);
 }
 
@@ -110,6 +112,7 @@ const char *cPluginvdrTva::CommandLineHelp(void)
   // Return a string that describes all known command line options.
   return "  -l n     --lifetime=n       Lifetime of new timers (default 99)\n"
 	 "  -m addr  --mailaddr=addr    Address to send mail report\n"
+	 "  -n       --nocheck          Do not check for timer collisions\n"
 	 "  -p n     --priority=n       Priority of new timers (default 99)\n"
 	 "  -s n     --serieslifetime=n Days to remember a series after the last event\n"
 	 "                              (default 30)\n"
@@ -125,13 +128,14 @@ bool cPluginvdrTva::ProcessArgs(int argc, char *argv[])
        { "lifetime",       required_argument, NULL, 'l' },
        { "updatetime",     required_argument, NULL, 'u' },
        { "mailaddr",	   required_argument, NULL, 'm' },
+       { "nocheck",	   no_argument,       NULL, 'n' },
        { NULL }
      };
 
   int c, opt;
   char *hours, *mins, *strtok_next;
   char buf[32];
-  while ((c = getopt_long(argc, argv, "l:m:p:s:u:", long_options, NULL)) != -1) {
+  while ((c = getopt_long(argc, argv, "l:m:n:p:s:u:", long_options, NULL)) != -1) {
     switch (c) {
       case 'l':
 	opt = atoi(optarg);
@@ -139,6 +143,9 @@ bool cPluginvdrTva::ProcessArgs(int argc, char *argv[])
 	break;
       case 'm':
 	tvalog.setmailTo(optarg);
+	break;
+      case 'n':
+	checkCollisions = false;
 	break;
       case 'p':
 	opt = atoi(optarg);
@@ -312,6 +319,7 @@ bool cPluginvdrTva::SetupParse(const char *Name, const char *Value)
   else if (!strcasecmp(Name, "TimerLifetime")) lifetime = atoi(Value);
   else if (!strcasecmp(Name, "TimerPriority")) priority = atoi(Value);
   else if (!strcasecmp(Name, "UpdateTime")) updatetime = atoi(Value);
+  else if (!strcasecmp(Name, "CheckCollisions")) checkCollisions = atoi(Value);
   else return false;
   return true;
 }
@@ -501,7 +509,9 @@ void cPluginvdrTva::Update()
 void cPluginvdrTva::Check()
 {
   CheckChangedEvents();
-  CheckTimerClashes();
+  if (checkCollisions) {
+    CheckTimerClashes();
+  }
   CheckSplitTimers();
   isyslog("vdrtva: Checks complete");
 }
@@ -913,11 +923,13 @@ cTvaMenuSetup::cTvaMenuSetup(void)
   newpriority = priority;
   newseriesLifetime = seriesLifetime / SECSINDAY;
   newupdatetime = updatetime;
+  newcheckcollisions = checkCollisions;
   Add(new cMenuEditIntItem(tr("Collection period (min)"), &newcollectionperiod, 1, 99));
   Add(new cMenuEditIntItem(tr("Series link lifetime (days)"), &newseriesLifetime, 1, 366));
   Add(new cMenuEditIntItem(tr("New timer lifetime"), &newlifetime, 0, 99));
   Add(new cMenuEditIntItem(tr("New timer priority"), &newpriority, 0, 99));
   Add(new cMenuEditTimeItem(tr("Update Time (HH:MM)"), &newupdatetime));
+  Add(new cMenuEditBoolItem(tr("Check collisions"), &newcheckcollisions));
 }
 
 void cTvaMenuSetup::Store(void)
@@ -927,6 +939,7 @@ void cTvaMenuSetup::Store(void)
   SetupStore("TimerLifetime", newlifetime); lifetime = newlifetime;
   SetupStore("TimerPriority", newpriority); priority = newpriority;
   SetupStore("UpdateTime", newupdatetime); updatetime = newupdatetime;
+  SetupStore("CheckCollisions", newcheckcollisions); checkCollisions = newcheckcollisions;
 }
 
 
@@ -1592,7 +1605,8 @@ cMenuLinks::cMenuLinks(void):cOsdMenu(tr("Series Links"), 6)
     Add(item);
   }
   Sort();
-  SetHelp(tr("Delete"), tr("Info"), tr(""), tr(""));
+//  SetHelp(tr("Delete"), tr("Info"), tr(""), tr(""));
+  SetHelp(tr("Delete"), tr("Info"));
   Display();
 }
 

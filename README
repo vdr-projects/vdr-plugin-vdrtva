@@ -65,7 +65,8 @@ parameter or in VDR's OSD (default 03:00) which:
 - Checks each series link to see if any new events have been added to the EPG in
   the same series. If so then timers are added for them.
 
-- Checks for timer clashes and suggests possible alternative recording times.
+- Checks for timer clashes and suggests possible alternative recording times
+  (unless the -n flag is set).
 
 - Checks that the event being recorded by each timer is the same as when the
   timer was set (ie that the EPG has not changed in the meantime)
@@ -82,6 +83,7 @@ The plugin takes the following parameters:
 
   -l n     --lifetime=n         Lifetime of new timers (default 99)
   -m addr  --mailaddr=addr      Address to send mail report
+  -n       --nocheck            Do not check for timer collisions
   -p n     --priority=n         Priority of new timers (default 99)
   -s n     --serieslifetime=n   Days to remember a series after the last event
                                 (default 30)

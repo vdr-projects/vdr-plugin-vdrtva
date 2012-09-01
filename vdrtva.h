@@ -41,6 +41,7 @@ private:
   int newpriority;
   int newseriesLifetime;
   int newupdatetime;
+  int newcheckcollisions;
 protected:
   virtual void Store(void);
 public:
