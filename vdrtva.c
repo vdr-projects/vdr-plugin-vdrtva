@@ -24,7 +24,7 @@ cLinks Links;
 cTvaLog tvalog;
 char *configDir;
 
-static const char *VERSION        = "0.3.0";
+static const char *VERSION        = "0.3.1";
 static const char *DESCRIPTION    = "Series Record plugin";
 static const char *MAINMENUENTRY  = "Series Links";
 
@@ -1048,11 +1048,9 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
       sectionSyncer.Reset();
       SI::SDT sdt(Data, false);
       if (!sdt.CheckCRCAndParse()) {
-        dsyslog ("vdrtva: SDT Parse / CRC error");
         return;
       }
       if (!sectionSyncer.Sync(sdt.getVersionNumber(), sdt.getSectionNumber(), sdt.getLastSectionNumber())) {
-        dsyslog ("vdrtva: SDT Syncer error");
         return;
       }
       SI::SDT::Service SiSdtService;
@@ -1084,7 +1082,6 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 //      sectionSyncer.Reset();
         SI::EIT eit(Data, false);
         if (!eit.CheckCRCAndParse()) {
-          dsyslog ("vdrtva: EIT Parse / CRC error");
           return;
         }
 

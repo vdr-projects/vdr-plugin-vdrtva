@@ -1,6 +1,6 @@
-diff -ur vdrtest/config.c vdr-1.7/config.c
---- vdrtest/config.c	2012-06-17 13:27:07.000000000 +0100
-+++ vdr-1.7/config.c	2012-07-14 15:06:41.138878534 +0100
+diff -u vdr-1.7.31/config.c vdr-1.7/config.c
+--- vdr-1.7.31/config.c 2012-09-15 12:52:03.000000000 +0100
++++ vdr-1.7/config.c    2012-10-08 09:52:37.091506577 +0100
 @@ -415,6 +415,7 @@
    UseSubtitle = 1;
    UseVps = 0;
@@ -9,15 +9,15 @@ diff -ur vdrtest/config.c vdr-1.7/config.c
    RecordingDirs = 1;
    FoldersInTimerMenu = 1;
    NumberKeysForChars = 1;
-@@ -611,6 +612,7 @@
+@@ -615,6 +616,7 @@
    else if (!strcasecmp(Name, "UseSubtitle"))         UseSubtitle        = atoi(Value);
    else if (!strcasecmp(Name, "UseVps"))              UseVps             = atoi(Value);
    else if (!strcasecmp(Name, "VpsMargin"))           VpsMargin          = atoi(Value);
-+  else if (!strcasecmp(Name, "VpsFallback"))         VpsFallback      = atoi(Value);
++  else if (!strcasecmp(Name, "VpsFallback"))         VpsFallback        = atoi(Value);
    else if (!strcasecmp(Name, "RecordingDirs"))       RecordingDirs      = atoi(Value);
    else if (!strcasecmp(Name, "FoldersInTimerMenu"))  FoldersInTimerMenu = atoi(Value);
    else if (!strcasecmp(Name, "NumberKeysForChars"))  NumberKeysForChars = atoi(Value);
-@@ -710,6 +712,7 @@
+@@ -718,6 +720,7 @@
    Store("UseSubtitle",        UseSubtitle);
    Store("UseVps",             UseVps);
    Store("VpsMargin",          VpsMargin);
@@ -25,10 +25,10 @@ diff -ur vdrtest/config.c vdr-1.7/config.c
    Store("RecordingDirs",      RecordingDirs);
    Store("FoldersInTimerMenu", FoldersInTimerMenu);
    Store("NumberKeysForChars", NumberKeysForChars);
-diff -ur vdrtest/config.h vdr-1.7/config.h
---- vdrtest/config.h	2012-06-17 12:14:50.000000000 +0100
-+++ vdr-1.7/config.h	2012-07-14 15:06:41.138878534 +0100
-@@ -285,6 +285,7 @@
+diff -u vdr-1.7.31/config.h vdr-1.7/config.h
+--- vdr-1.7.31/config.h 2012-09-15 12:51:54.000000000 +0100
++++ vdr-1.7/config.h    2012-10-08 09:52:37.092506509 +0100
+@@ -286,6 +286,7 @@
    int UseSubtitle;
    int UseVps;
    int VpsMargin;
@@ -36,23 +36,23 @@ diff -ur vdrtest/config.h vdr-1.7/config.h
    int RecordingDirs;
    int FoldersInTimerMenu;
    int NumberKeysForChars;
-diff -ur vdrtest/menu.c vdr-1.7/menu.c
---- vdrtest/menu.c	2012-06-17 12:12:25.000000000 +0100
-+++ vdr-1.7/menu.c	2012-07-14 15:06:41.143878229 +0100
-@@ -3107,6 +3107,7 @@
+diff -u vdr-1.7.31/menu.c vdr-1.7/menu.c
+--- vdr-1.7.31/menu.c   2012-09-15 12:45:28.000000000 +0100
++++ vdr-1.7/menu.c      2012-10-08 09:52:37.096506237 +0100
+@@ -3116,6 +3116,7 @@
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Use episode name"),          &data.UseSubtitle));
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Use VPS"),                   &data.UseVps));
    Add(new cMenuEditIntItem( tr("Setup.Recording$VPS margin (s)"),            &data.VpsMargin, 0));
 +  Add(new cMenuEditBoolItem(tr("Setup.Recording$Use running status as VPS fallback"), &data.VpsFallback));
    Add(new cMenuEditBoolItem(tr("Setup.Recording$Mark instant recording"),    &data.MarkInstantRecord));
    Add(new cMenuEditStrItem( tr("Setup.Recording$Name instant recording"),     data.NameInstantRecord, sizeof(data.NameInstantRecord)));
-   Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 1, MAXINSTANTRECTIME));
-diff -ur vdrtest/timers.c vdr-1.7/timers.c
---- vdrtest/timers.c	2012-06-09 15:37:24.000000000 +0100
-+++ vdr-1.7/timers.c	2012-07-14 15:06:41.144878168 +0100
-@@ -431,7 +431,7 @@
+   Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 0, MAXINSTANTRECTIME, tr("Setup.Recording$present event")));
+diff -u vdr-1.7.31/timers.c vdr-1.7/timers.c
+--- vdr-1.7.31/timers.c 2012-09-15 14:34:03.000000000 +0100
++++ vdr-1.7/timers.c    2012-10-08 09:52:37.098506102 +0100
+@@ -460,7 +460,7 @@
    deferred = 0;
- 
+
    if (HasFlags(tfActive)) {
 -     if (HasFlags(tfVps) && event && event->Vps()) {
 +     if (HasFlags(tfVps) && event && (Setup.VpsFallback || event->Vps())) {

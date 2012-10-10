@@ -80,3 +80,8 @@ VDR Plugin 'vdrtva' Revision History
 - Remove leading 'crid://' from Default Authority if found (corrupts links file).
 - Use builtin VDR function to sort timers, if available.
 - Update VPS patch for VDR 1.7.29.
+
+2012-10-10: Version 0.3.1
+- Add -n option to disable collision check (eg for multi-card setups).
+- Don't report data CRC errors in event log.
+- VPS patch updated for VDR 1.7.31.
