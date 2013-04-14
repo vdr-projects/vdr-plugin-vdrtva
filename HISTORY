@@ -85,3 +85,9 @@ VDR Plugin 'vdrtva' Revision History
 - Add -n option to disable collision check (eg for multi-card setups).
 - Don't report data CRC errors in event log.
 - VPS patch updated for VDR 1.7.31.
+
+2013-01-02: Version 0.3.2
+- Update Makefile and patch for VDR 1.7.35 - incompatible with earlier versions.
+
+2013-04-14: Version 0.3.3
+- Update patch for VDR 2.0.0.

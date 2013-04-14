@@ -16,7 +16,8 @@ Option to select which device to use for CRID collection.
 
 Remove reliance on VDR "Housekeeping" callback - causes problems when VDR is busy.
 
+Remove need to patch core VDR for accurate recordings.
+
 Bugs:
 	Very rare crash 'pure virtual method called' in plugin - possibly solved. 
-	Spurious timer clash report - seen once, cause unknown.
 	VDR crash under specific circumstances, cannot reproduce elsewhere.
