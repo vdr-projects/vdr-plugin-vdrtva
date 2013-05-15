@@ -56,7 +56,7 @@ private:
   void StartDataCapture(void);
   void StopDataCapture(void);
   void Update(void);
-  void Check(void);
+  void Check(bool daily);
   void Report(void);
   void Expire(void);
   void tvasyslog(const char *Fmt, ...);
@@ -237,7 +237,7 @@ void cPluginvdrTva::Housekeeping(void)
 	state++;
 	break;
       case 1:
-	Check();
+	Check(1);
 	Report();
 	nextactiontime = NextUpdateTime();
 	state = 0;
@@ -247,7 +247,7 @@ void cPluginvdrTva::Housekeeping(void)
   }
   else if (statusMonitor->GetTimerAddedDelta() > 60) {
     Update();			// Wait 1 minute for VDR to enter the event data into the new timer.
-    Check();
+    Check(0);
     statusMonitor->ClearTimerAdded();
   }
 }
@@ -460,7 +460,7 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
   else if (strcasecmp(Command, "UPDT") == 0) {
     if (captureComplete) {
       Update();
-      Check();
+      Check(0);
       return cString::sprintf("Update completed");
     }
     else {
@@ -506,8 +506,11 @@ void cPluginvdrTva::Update()
   isyslog("vdrtva: Updates complete");
 }
 
-void cPluginvdrTva::Check()
+void cPluginvdrTva::Check(bool daily)
 {
+  if (daily) {
+    REPORT(" \nDaily Timer Check\n-----------------\n ");
+  }
   CheckChangedEvents();
   if (checkCollisions) {
     CheckTimerClashes();
