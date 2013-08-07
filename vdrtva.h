@@ -156,8 +156,9 @@ class cLinkItem : public cListObject {
     char *iCrids;
     char *path;
     char *title;
+    char *channelname;
   public:
-    cLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title);
+    cLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title, const char *channelName);
     ~cLinkItem(void);
     void SetModtime(time_t modtime);
     void SetIcrids(const char *icrids);
@@ -166,6 +167,7 @@ class cLinkItem : public cListObject {
     time_t ModTime(void) { return modtime; }
     char * Path(void) { return path; }
     char * Title(void) { return title; }
+    char * channelName(void) { return channelname; }
 };
 
 class cLinks : public cRwLock, public cConfig<cLinkItem> {
@@ -175,7 +177,7 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
   public:
     cLinks(void);
     int MaxNumber(void) { return maxNumber; }
-    cLinkItem *NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title);
+    cLinkItem *NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title, const char *channelName);
     void Load(void);
     void Save(void);
     bool DeleteItem(const char *sCRID);
