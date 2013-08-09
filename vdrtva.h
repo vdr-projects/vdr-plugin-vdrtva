@@ -178,12 +178,15 @@ class cLinks : public cRwLock, public cConfig<cLinkItem> {
     cLinks(void);
     int MaxNumber(void) { return maxNumber; }
     cLinkItem *NewLinkItem(const char *sCRID, time_t ModTime, const char *iCRIDs, const char *Path, const char *Title, const char *channelName);
+    bool AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title, const char *channelName);
     void Load(void);
     void Save(void);
     bool DeleteItem(const char *sCRID);
     void Expire(void);
     void SetUpdated(void);
     void DeleteTimersForSCRID(const char *sCRID);
+    cLinkItem * getLinkItem(const char *sCRID);
+    bool isEventNeeded(const char *iCRID);
 };
 
 

@@ -133,7 +133,7 @@ Files
 The plugin stores details of series links in the file links.data which is in the
 VIDEODIR/plugins/vdrtva directory. Entries in this file have the format:
 
-<scrid>,<modtime>;<icrids>;<path>;<title>
+<scrid>,<modtime>;<icrids>;<path>;<title>;<channel>
 
 scrid	The series CRID.
 modtime	The start time of the latest event in this series.
@@ -141,6 +141,7 @@ icrids	The CRIDS of the events in the series, separated by colons.
 path	The subdirectory to store recordings in this series, taken from the first 
 	timer, or the string (NULL) if no subdirectory was given.
 title	The title of the first event in the series.
+channel The channel name of the first recorded event in the series.
 
 
 Points to remember:

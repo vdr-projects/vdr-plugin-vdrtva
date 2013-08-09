@@ -44,7 +44,6 @@ private:
   cTvaFilter *Filter;
   cTvaStatusMonitor *statusMonitor;
   bool AppendItems(const char* Option);
-  bool AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title, const char *channelName);
   void UpdateLinksFromTimers(void);
   void AddNewEventsToSeries(void);
   bool CheckSplitTimers(void);
@@ -535,31 +534,6 @@ void cPluginvdrTva::Report()
   }
 }
 
-// add a new event to the Links table, either as an addition to an existing series or as a new series.
-// return false = nothing done, true = new event for old series, or new series.
-
-bool cPluginvdrTva::AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title, const char *channelName)
-{
-  if (Links.MaxNumber() >=1) {
-    for (cLinkItem *Item = Links.First(); Item; Item = Links.Next(Item)) {
-      if (strcasecmp(Item->sCRID(), scrid) == 0) {
-	if (strstr(Item->iCRIDs(), icrid) == NULL) {
-	  cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
-	  modtime = max(Item->ModTime(), modtime);
-	  Item->SetModtime(modtime);
-	  Item->SetIcrids(icrids);
-	  isyslog("vdrtva: Adding new event %s to series %s", icrid, scrid);
-	  return true;
-	}
-	return false;
-      }
-    }
-  }
-  Links.NewLinkItem(scrid, modtime, icrid, path, title, channelName);
-  isyslog("vdrtva: Creating new series %s for event %s (%s)", scrid, icrid, title);
-  return true;
-}
-
 // Check that all timers are part of series links and update the links.
 
 void cPluginvdrTva::UpdateLinksFromTimers()
@@ -583,16 +557,14 @@ void cPluginvdrTva::UpdateLinksFromTimers()
 	if (char *p = strrchr(path, '~')) {
 	  *p = '\0';
 	  p++;
-	  AddSeriesLink(scrid, event->StartTime(), icrid, path, p, channel->Name());
+	  Links.AddSeriesLink(scrid, event->StartTime(), icrid, path, p, channel->Name());
 	}
-	else AddSeriesLink(scrid, event->StartTime(), icrid, NULL, path, channel->Name());
+	else Links.AddSeriesLink(scrid, event->StartTime(), icrid, NULL, path, channel->Name());
 	free (path);
       }
     }
   }
 }
-
-// Find new events for series links and create timers for them.
 
 void cPluginvdrTva::AddNewEventsToSeries()
 {
@@ -604,27 +576,19 @@ void cPluginvdrTva::AddNewEventsToSeries()
   for (cEventCRID *eventCRID = EventCRIDs.First(); eventCRID; eventCRID = EventCRIDs.Next(eventCRID)) {
     cChanDA *chanDA = ChanDAs.GetByChannelID(eventCRID->Cid());
     if (chanDA) {
-// Check for an entry in the Links table with the same sCRID
+// Do we have a series link for this sCRID?
       cString scrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->sCRID());
-      for (cLinkItem *Item = Links.First(); Item; Item = Links.Next(Item)) {
-	if (strcasecmp(Item->sCRID(), scrid) == 0) {
-// if found, look for the event's icrid in ALL series
-	  cString icrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->iCRID());
-	  bool done = false;
-	  for (cLinkItem *Item2 = Links.First(); Item2; Item2 = Links.Next(Item2)) {
-	    if (strstr(Item2->iCRIDs(), icrid) != NULL) {
-	      done = true;
-	    }
-	  }
-// if not found, add a new timer for the event and update the series.
-	  if (!done) {
-	    cChannel *channel = Channels.GetByNumber(eventCRID->Cid());
-	    const cSchedule *schedule = Schedules->GetSchedule(channel);
-	    if (schedule) {
-	      const cEvent *event = schedule->GetEvent(eventCRID->Eid());
-	      if (CreateTimerFromEvent(event, Item->Path())) {
-		AddSeriesLink(scrid, event->StartTime(), icrid, NULL, NULL, NULL);
-	      }
+      cLinkItem *Item = Links.getLinkItem(scrid);
+      if (Item != NULL) {
+// Is the event already being recorded? Create a new timer if not.
+	cString icrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->iCRID());
+	if (Links.isEventNeeded(icrid)) {
+	  cChannel *channel = Channels.GetByNumber(eventCRID->Cid());
+	  const cSchedule *schedule = Schedules->GetSchedule(channel);
+	  if (schedule) {
+	    const cEvent *event = schedule->GetEvent(eventCRID->Eid());
+	    if (CreateTimerFromEvent(event, Item->Path())) {
+	      Links.AddSeriesLink(scrid, event->StartTime(), icrid, NULL, NULL, NULL);
 	    }
 	  }
 	}
@@ -1477,6 +1441,31 @@ void cLinks::Save()
   }
 }
 
+// add a new event to the Links table, either as an addition to an existing series or as a new series.
+// return false = nothing done, true = new event for old series, or new series.
+
+bool cLinks::AddSeriesLink(const char *scrid, time_t modtime, const char *icrid, const char *path, const char *title, const char *channelName)
+{
+  if (maxNumber >= 1) {
+    cLinkItem * Item = getLinkItem(scrid);
+    if (Item != NULL) {
+      if (strstr(Item->iCRIDs(), icrid) == NULL) {
+	cString icrids = cString::sprintf("%s:%s", Item->iCRIDs(), icrid);
+	modtime = max(Item->ModTime(), modtime);
+	Item->SetModtime(modtime);
+	Item->SetIcrids(icrids);
+	isyslog("vdrtva: Adding new event %s to series %s", icrid, scrid);
+	return true;
+      }
+      return false;
+    }
+  }
+  NewLinkItem(scrid, modtime, icrid, path, title, channelName);
+  isyslog("vdrtva: Creating new series %s for event %s (%s)", scrid, icrid, title);
+  return true;
+}
+
+
 bool cLinks::DeleteItem(const char *sCRID)
 {
   if (maxNumber == 0) return false;
@@ -1536,6 +1525,22 @@ void cLinks::Expire(void)
     }
     Item = next;
   }
+}
+
+cLinkItem * cLinks::getLinkItem(const char *sCRID)
+{
+  for (cLinkItem *Item = First(); Item; Item = Next(Item)) {
+    if (strcasecmp(Item->sCRID(), sCRID) == 0) return Item;
+  }
+  return NULL;
+}
+
+bool cLinks::isEventNeeded(const char *iCRID)
+{
+  for (cLinkItem *Item = First(); Item; Item = Next(Item)) {
+    if (strstr(Item->iCRIDs(), iCRID) != NULL) return false;
+  }
+  return true;
 }
 
 void cLinks::SetUpdated(void)
