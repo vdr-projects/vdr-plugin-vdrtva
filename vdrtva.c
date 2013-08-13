@@ -379,7 +379,7 @@ cString cPluginvdrTva::SVDRPCommand(const char *Command, const char *Option, int
     if (Links.MaxNumber() >=1) {
       ReplyCode = 250;
       for (cLinkItem *linkItem = Links.First(); linkItem; linkItem = Links.Next(linkItem)) {
-	reply.Append("%s,%d;%s;%s;%s;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs(), linkItem->Path(), linkItem->Title(), linkItem->channelName());
+	reply.Append("%s;%d;%s;%s;%s;%s\n", linkItem->sCRID(), linkItem->ModTime(), linkItem->iCRIDs(), linkItem->Path(), linkItem->Title(), linkItem->channelName());
       }
     }
     if (reply.Length() > 0) return cString(reply.Buffer());
@@ -580,12 +580,13 @@ void cPluginvdrTva::AddNewEventsToSeries()
       cString scrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->sCRID());
       cLinkItem *Item = Links.getLinkItem(scrid);
       if (Item != NULL) {
-// Is the event already being recorded? Create a new timer if not.
+// Is the event already being recorded, possibly as part of a different series?
 	cString icrid = cString::sprintf("%s%s", chanDA->DA(),eventCRID->iCRID());
 	if (Links.isEventNeeded(icrid)) {
+// Is the event on the same channel as the first event of the series? If so create a new timer.
 	  cChannel *channel = Channels.GetByNumber(eventCRID->Cid());
 	  const cSchedule *schedule = Schedules->GetSchedule(channel);
-	  if (schedule) {
+	  if (schedule && (!Item->channelName() || !strcmp(channel->Name(), Item->channelName()))) {
 	    const cEvent *event = schedule->GetEvent(eventCRID->Eid());
 	    if (CreateTimerFromEvent(event, Item->Path())) {
 	      Links.AddSeriesLink(scrid, event->StartTime(), icrid, NULL, NULL, NULL);
@@ -986,8 +987,8 @@ char mailcmd[256];
   fprintf(mail, "From: %s\n", mailfrom);
   fprintf(mail, "To: %s\n", mailto);
   fprintf(mail, "Subject: vdrTva report\n");
-  fprintf(mail, "Content-Type: text/plain; charset=ISO-8859-1\n");
-  fprintf(mail, "\n");
+  fprintf(mail, "Content-Type: text/plain; charset=ISO-8859-1\n\n");
+  fprintf(mail, "Activity since last report\n--------------------------\n \n");
   fputs(buffer, mail);
   pclose(mail);
   Clear();
@@ -1392,7 +1393,7 @@ void cLinks::Load()
     cReadLine ReadLine;
     time_t modtime;
     while ((s = ReadLine.Read(f)) != NULL) {
-      char *scrid = strtok_r(s, ",", &strtok_next);
+      char *scrid = strtok_r(s, ";,", &strtok_next);
       char *mtime = strtok_r(NULL, ";", &strtok_next);
       char *icrids = strtok_r(NULL, ";", &strtok_next);
       char *path = strtok_r(NULL, ";", &strtok_next);
@@ -1418,7 +1419,7 @@ void cLinks::Save()
   FILE *f = fopen(newlinks, "w");
   if (f) {
     for (cLinkItem *Item = First(); Item; Item = Next(Item)) {
-      fprintf(f, "%s,%ld;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
+      fprintf(f, "%s;%ld;%s", Item->sCRID(), Item->ModTime(), Item->iCRIDs());
       if (Item->Path()) {
 	fprintf(f, ";%s", Item->Path());
       }

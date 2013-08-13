@@ -91,3 +91,9 @@ VDR Plugin 'vdrtva' Revision History
 
 2013-04-14: Version 0.3.3
 - Update patch for VDR 2.0.0.
+
+2013-08-13: Version 0.3.4
+- Add headings to improve readability of daily log report.
+- Add channel name of first event to links file entries.
+- Only add item to a series if it is on the same channel as the original
+    (fix for UK "Channel 5" stable using same series CRID on multiple channels).
