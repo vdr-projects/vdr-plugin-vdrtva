@@ -600,6 +600,7 @@ void cPluginvdrTva::AddNewEventsToSeries()
 
 // Check timers to see if the event they were set to record is still in the EPG.
 // This won't work if VPS is not used and the start time is padded by a custom amount.
+// TODO Go hunting for another instance of the event.
 
 void cPluginvdrTva::CheckChangedEvents()
 {
@@ -614,10 +615,10 @@ void cPluginvdrTva::CheckChangedEvents()
       if (!ti->HasFlags(tfVps)) {
 	start_time += Setup.MarginStart * 60;
       }
-      const cEvent *event = schedule->GetEvent(0, start_time);
       const char *file = strrchr(ti->File(), '~');
       if (!file) file = ti->File();
       else file++;
+      const cEvent *event = schedule->GetEvent(0, start_time);
       if (!event) REPORT("Event for timer '%s' at %s seems to no longer exist", file, *DayDateTime(ti->StartTime()));
       else if (strcmp(file, event->Title())) {
 	REPORT("Changed timer event at %s: %s <=> %s", *DayDateTime(ti->StartTime()), file, event->Title());

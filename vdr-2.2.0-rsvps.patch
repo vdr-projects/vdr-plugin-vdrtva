@@ -1,0 +1,62 @@
+diff -u vdr-2.2.0/config.c ../vdr-2.2.0/config.c
+--- vdr-2.2.0/config.c  2015-02-10 12:24:13.000000000 +0000
++++ ../vdr-2.2.0/config.c       2015-02-19 14:59:58.956917083 +0000
+@@ -424,6 +424,7 @@
+   UseSubtitle = 1;
+   UseVps = 0;
+   VpsMargin = 120;
++  VpsFallback = 0;
+   RecordingDirs = 1;
+   FoldersInTimerMenu = 1;
+   AlwaysSortFoldersFirst = 1;
+@@ -646,6 +647,7 @@
+   else if (!strcasecmp(Name, "UseSubtitle"))         UseSubtitle        = atoi(Value);
+   else if (!strcasecmp(Name, "UseVps"))              UseVps             = atoi(Value);
+   else if (!strcasecmp(Name, "VpsMargin"))           VpsMargin          = atoi(Value);
++  else if (!strcasecmp(Name, "VpsFallback"))         VpsFallback        = atoi(Value);
+   else if (!strcasecmp(Name, "RecordingDirs"))       RecordingDirs      = atoi(Value);
+   else if (!strcasecmp(Name, "FoldersInTimerMenu"))  FoldersInTimerMenu = atoi(Value);
+   else if (!strcasecmp(Name, "AlwaysSortFoldersFirst")) AlwaysSortFoldersFirst = atoi(Value);
+@@ -772,6 +774,7 @@
+   Store("UseSubtitle",        UseSubtitle);
+   Store("UseVps",             UseVps);
+   Store("VpsMargin",          VpsMargin);
++  Store("VpsFallback",        VpsFallback);
+   Store("RecordingDirs",      RecordingDirs);
+   Store("FoldersInTimerMenu", FoldersInTimerMenu);
+   Store("AlwaysSortFoldersFirst", AlwaysSortFoldersFirst);
+diff -u vdr-2.2.0/config.h ../vdr-2.2.0/config.h
+--- vdr-2.2.0/config.h  2015-02-13 15:39:08.000000000 +0000
++++ ../vdr-2.2.0/config.h       2015-02-19 14:59:58.966916935 +0000
+@@ -298,6 +298,7 @@
+   int UseSubtitle;
+   int UseVps;
+   int VpsMargin;
++  int VpsFallback;
+   int RecordingDirs;
+   int FoldersInTimerMenu;
+   int AlwaysSortFoldersFirst;
+diff -u vdr-2.2.0/menu.c ../vdr-2.2.0/menu.c
+--- vdr-2.2.0/menu.c    2015-02-10 12:37:06.000000000 +0000
++++ ../vdr-2.2.0/menu.c 2015-02-19 14:59:58.986916637 +0000
+@@ -3698,6 +3698,7 @@
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use episode name"),          &data.UseSubtitle));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Use VPS"),                   &data.UseVps));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$VPS margin (s)"),            &data.VpsMargin, 0));
++  Add(new cMenuEditBoolItem(tr("Setup.Recording$Use running status as VPS fallback"), &data.VpsFallback));
+   Add(new cMenuEditBoolItem(tr("Setup.Recording$Mark instant recording"),    &data.MarkInstantRecord));
+   Add(new cMenuEditStrItem( tr("Setup.Recording$Name instant recording"),     data.NameInstantRecord, sizeof(data.NameInstantRecord)));
+   Add(new cMenuEditIntItem( tr("Setup.Recording$Instant rec. time (min)"),   &data.InstantRecordTime, 0, MAXINSTANTRECTIME, tr("Setup.Recording$present event")));
+diff -u vdr-2.2.0/timers.c ../vdr-2.2.0/timers.c
+--- vdr-2.2.0/timers.c  2013-12-28 11:33:08.000000000 +0000
++++ ../vdr-2.2.0/timers.c       2015-02-19 14:59:58.996916488 +0000
+@@ -436,7 +436,7 @@
+   deferred = 0;
+ 
+   if (HasFlags(tfActive)) {
+-     if (HasFlags(tfVps) && event && event->Vps()) {
++     if (HasFlags(tfVps) && event && (Setup.VpsFallback || event->Vps())) {
+         if (Margin || !Directly) {
+            startTime = event->StartTime();
+            stopTime = event->EndTime();
+
