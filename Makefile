@@ -55,7 +55,13 @@ DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
 
 ### The object files (add further files here):
 
-OBJS = $(PLUGIN).o
+ifeq "2.3.0" "$(word 1, $(sort $(APIVERSION) 2.3.0))"
+ SOURCES = $(PLUGIN)-2.3.c
+ OBJS = $(PLUGIN)-2.3.o
+else
+ SOURCES = $(PLUGIN).c
+ OBJS = $(PLUGIN).o
+endif
 
 ### The main target:
 
@@ -86,7 +92,7 @@ I18Npot   = $(PODIR)/$(PLUGIN).pot
 %.mo: %.po
 	msgfmt -c -o $@ $<
 
-$(I18Npot): $(wildcard *.c)
+$(I18Npot): $(SOURCES)
 	xgettext -C -cTRANSLATORS --no-wrap --no-location -k -ktr -ktrNOOP --package-name=vdr-$(PLUGIN) --package-version=$(VERSION) --msgid-bugs-address='<see README>' -o $@ `ls $^`
 
 %.po: $(I18Npot)

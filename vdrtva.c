@@ -24,7 +24,7 @@ cLinks Links;
 cTvaLog tvalog;
 char *configDir;
 
-static const char *VERSION        = "0.3.3";
+static const char *VERSION        = "0.3.5";
 static const char *DESCRIPTION    = "Series Record plugin";
 static const char *MAINMENUENTRY  = "Series Links";
 
