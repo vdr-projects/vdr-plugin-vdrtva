@@ -101,3 +101,6 @@ VDR Plugin 'vdrtva' Revision History
 2015-02-23: Version 0.3.5
 - Update patch for VDR 2.2.0.
 
+2015-10-08: Version 0.3.6
+- Update patch for VDR 2.3.1.
+- Update plugin for VDR 2.3.1 via separate source file and Makefile changes.

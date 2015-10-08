@@ -12,7 +12,7 @@ longer work.
 To use VPS for accurate recording, some conditions must be met:
 
 - VDR must be compiled with the 'VPS Fallback' patch (included with this
-  plugin). Note that some Linux distributions (eg. Mandriva and Mageia) include
+  plugin). Note that some Linux distributions (eg. Mageia) include
   this patch in their binaries. 
 - Parameters 'UseVps' and 'VpsFallback' in setup.conf must both be set to 1
 - Timers must have the 'use VPS' flag set
@@ -35,4 +35,5 @@ CAUTIONS
 - VPS recordings seem to have a lower priority than live viewing. VDR
   will not interrupt live viewing to start looking for the start of a recording.
 - The recording will not be made correctly if the wanted programme is not
-  'next' on the channel at (expected start time - VpsMargin).
+  'next' on the channel at (expected start time - VpsMargin), so do not set 
+  VpsMargin too high.

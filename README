@@ -133,7 +133,7 @@ Files
 The plugin stores details of series links in the file links.data which is in the
 VIDEODIR/plugins/vdrtva directory. Entries in this file have the format:
 
-<scrid>,<modtime>;<icrids>;<path>;<title>;<channel>
+<scrid>;<modtime>;<icrids>;<path>;<title>;<channel>
 
 scrid	The series CRID.
 modtime	The start time of the latest event in this series.
@@ -164,8 +164,7 @@ Points to remember:
 - The 'suggested' events list may have CRIDs which do not appear in the events
   list.
 
-The plugin is compatible with VDR version >= 1.7.19. The patch version will
-work with VDR 1.6.
+The plugin is compatible with VDR version >= 1.7.19.
 
 Although I use this software day-to-day on my VDR installation, this is
 Beta-quality code - USE AT YOUR OWN RISK!!
