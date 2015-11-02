@@ -1414,7 +1414,13 @@ void cLinks::Load()
     fclose (f);
     isyslog("vdrtva: loaded %d series links", MaxNumber());
   }
-  else esyslog("vdrtva: series links file not found");
+  else {
+    if (f = fopen(curlinks, "w")) {
+      isyslog("vdrtva: created new empty series links file");
+      fclose (f);
+    }
+    else esyslog("vdrtva: failed to create new empty series links file");
+  }
   dirty = false;
 }
   
