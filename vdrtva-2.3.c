@@ -1020,15 +1020,20 @@ cTvaFilter::cTvaFilter(void)
 void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length)
 {
   // do something with the data here
-  LOCK_CHANNELS_READ;
+  cStateKey StateKey;
+  if ((const cTimers *Timers = cTimers::GetTimersRead(StateKey, 1)) == NULL) {
+    return;
+  }
   switch (Pid) {
     case 0x11: {
       sectionSyncer.Reset();
       SI::SDT sdt(Data, false);
       if (!sdt.CheckCRCAndParse()) {
+        StateKey.Remove();
         return;
       }
       if (!sectionSyncer.Sync(sdt.getVersionNumber(), sdt.getSectionNumber(), sdt.getLastSectionNumber())) {
+        StateKey.Remove();
         return;
       }
       SI::SDT::Service SiSdtService;
@@ -1060,11 +1065,13 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 //      sectionSyncer.Reset();
         SI::EIT eit(Data, false);
         if (!eit.CheckCRCAndParse()) {
+          StateKey.Remove();
           return;
         }
 
 	const cChannel *chan = Channels->GetByChannelID(tChannelID(Source(),eit.getOriginalNetworkId(),eit.getTransportStreamId(),eit.getServiceId()));
 	if (!chan) {
+	  StateKey.Remove();
 	  return;
 	}
 	SI::EIT::Event SiEitEvent;
@@ -1117,6 +1124,7 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
     }
     break;
   }
+  StateKey.Remove();
 }
 
 
