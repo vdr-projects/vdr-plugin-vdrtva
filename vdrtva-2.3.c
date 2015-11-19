@@ -1021,7 +1021,8 @@ void cTvaFilter::Process(u_short Pid, u_char Tid, const u_char *Data, int Length
 {
   // do something with the data here
   cStateKey StateKey;
-  if ((const cTimers *Timers = cTimers::GetTimersRead(StateKey, 1)) == NULL) {
+  const cChannels *Channels = cChannels::GetChannelsRead(StateKey, 1);
+  if (!Channels) {
     return;
   }
   switch (Pid) {
