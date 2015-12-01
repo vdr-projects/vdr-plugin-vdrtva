@@ -28,14 +28,13 @@ static const char *VERSION        = "0.3.6";
 static const char *DESCRIPTION    = "Series Record plugin";
 static const char *MAINMENUENTRY  = "Series Links";
 
-int collectionperiod;		// Time to collect all CRID data (default 10 minutes)
+int collectionperiod;		// Time to collect all CRID data (secs, default 600)
 int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
 int seriesLifetime;		// Expiry time of a series link (default 30 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
 bool checkCollisions;		// Whether to test for collisions (assuming single DVB card)
 bool captureComplete;		// Flag set if initial CRID capture has completed.
-time_t startTime;		// Time the plugin was initialised.
 
 class cPluginvdrTva : public cPlugin {
 private:
@@ -60,6 +59,7 @@ private:
   void Expire(void);
   void tvasyslog(const char *Fmt, ...);
   time_t NextUpdateTime(void);
+  cTimeMs capture;
 
 public:
   cPluginvdrTva(void);
@@ -94,11 +94,10 @@ cPluginvdrTva::cPluginvdrTva(void)
   seriesLifetime = 30 * SECSINDAY;
   priority = 99;
   lifetime = 99;
-  collectionperiod = 10 * 60;
+  collectionperiod = 10 * 60;	//secs
   updatetime = 300;
   captureComplete = false;
   checkCollisions = true;
-  startTime = time(NULL);
 }
 
 cPluginvdrTva::~cPluginvdrTva()
@@ -206,7 +205,7 @@ bool cPluginvdrTva::Start(void)
       esyslog("vdrtva: no mail server found");
     }
   }
-  nextactiontime = time(NULL) + collectionperiod + 1;	// wait for CRIDs to be collected
+  capture.Set(collectionperiod * 1000);
   return true;
 }
 
@@ -227,7 +226,7 @@ void cPluginvdrTva::Housekeeping(void)
   // Perform any cleanup or other regular tasks.
   static int state = 0;
 
-  if (nextactiontime < time(NULL)) {
+  if (captureComplete && (nextactiontime < time(NULL))) {
     statusMonitor->ClearTimerAdded();		// Ignore any timer changes while update is in progress
     switch (state) {
       case 0:
@@ -277,12 +276,13 @@ void cPluginvdrTva::MainThreadHook(void)
   
   static bool running = false;
 
-  if (!running && (time(NULL) - startTime > 5)) {
+  if (!running && (capture.Elapsed() > 5000)) {
     StartDataCapture();
     running = true;
   }
-  if (!captureComplete && (time(NULL) - startTime > collectionperiod)) {
+  if (!captureComplete && capture.TimedOut()) {
     captureComplete = true;
+    nextactiontime = time(NULL) + 1;
   }
 }
 
