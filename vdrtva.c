@@ -774,7 +774,7 @@ bool cPluginvdrTva::CreateTimerFromEvent(const cEvent *event, char *Path) {
       timer->SetEvent(event);
       Timers.Add(timer);
       Timers.SetModified();
-      REPORT("Timer created for '%s' on %s, %s %04d-%04d", etitle, channel->Name(), *DateString(starttime), timer->Start(), timer->Stop());
+      REPORT("Timer created for '%s' on %s, %s %04d-%04d", event->Title(), channel->Name(), *DateString(starttime), timer->Start(), timer->Stop());
       return true;
     }
     isyslog("vdrtva: Duplicate timer creation attempted for %s on %s", *timer->ToDescr(), *DateString(timer->StartTime()));
