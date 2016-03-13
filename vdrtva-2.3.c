@@ -31,7 +31,7 @@ static const char *MAINMENUENTRY  = "Series Links";
 int collectionperiod;		// Time to collect all CRID data (secs, default 600)
 int lifetime;			// Lifetime of series link recordings (default 99)
 int priority;			// Priority of series link recordings (default 99)
-int seriesLifetime;		// Expiry time of a series link (default 30 days)
+int seriesLifetime;		// Expiry time of a series link (default 91 days)
 int updatetime;			// Time to carry out the series link update HHMM (default 03:00)
 bool checkCollisions;		// Whether to test for collisions (assuming single DVB card)
 bool captureComplete;		// Flag set if initial CRID capture has completed.
@@ -91,7 +91,7 @@ cPluginvdrTva::cPluginvdrTva(void)
   // VDR OBJECTS TO EXIST OR PRODUCE ANY OUTPUT!
   configDir = NULL;
   Filter = NULL;
-  seriesLifetime = 30 * SECSINDAY;
+  seriesLifetime = 91 * SECSINDAY;
   priority = 99;
   lifetime = 99;
   collectionperiod = 10 * 60;	//secs
@@ -113,7 +113,7 @@ const char *cPluginvdrTva::CommandLineHelp(void)
 	 "  -n       --nocheck          Do not check for timer collisions\n"
 	 "  -p n     --priority=n       Priority of new timers (default 99)\n"
 	 "  -s n     --serieslifetime=n Days to remember a series after the last event\n"
-	 "                              (default 30)\n"
+	 "                              (default 91)\n"
 	 "  -u HH:MM --updatetime=HH:MM Time to update series links (default 03:00)\n";
 }
 

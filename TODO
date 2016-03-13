@@ -19,14 +19,12 @@ Remove reliance on VDR "Housekeeping" callback - causes problems when VDR is bus
 Remove need to patch core VDR for accurate recordings.
 
 Better compliance with NORDIG specification:
-  -	Series lifetime should be 91 days (14.3.3)
   -	Default Authority of a channel may change (14.3.3)
   -	VDR timers list should show if event is part of a series (14.3.3)
   -	Option to record series via CLI (14.3.3.1)
   -	Use CRIDs to offer better choice for late recording (14.3.13)
   -	Timer conflict resolution per spec (14.3.16.2)
 
-Fix data capture at startup for devices which have no RTC (eg Raspberry Pi).
 
 Bugs:
 	Very rare crash 'pure virtual method called' in plugin - possibly solved. 
