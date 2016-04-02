@@ -1,9 +1,0 @@
-- We should allow for Content Identifier Descriptors to include more than one CRID, as allowed in ETSI 102 323. Freeview has each CRID in a separate descriptor.
-
-- The Authority portion of the CRID is always taken from the SDT. ETSI 102 323 provides several other locations for this information which should be searched before the SDT.
-
-- ETSI 102 323 allows CRID data to be referenced indirectly via a Content Identifier Table (though this use is deprecated). Indirection is not supported as Freeview does not broadcast CITs.
-
-- series.pl should be smarter; it should choose the 'best' broadcast of an event, should workaround schedule clashes, and only record a series if the user requests it.
-
-- When using the accurate recording function, the event will not be recorded if it starts before (scheduled_start_time - VpsMargin).
