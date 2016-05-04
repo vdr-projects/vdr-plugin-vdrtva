@@ -207,7 +207,7 @@ public:
   cMenuLinkItem(cLinkItem *LinkItem);
   char * sCRID(void) { return linkitem->sCRID(); }
   cLinkItem * LinkItem(void) { return linkitem; }
-  int TimerCount(void);
+  int getTimers(cTvaLog *timerslist);
   virtual void Set(void);
   virtual int Compare(const cListObject &ListObject) const;
 };

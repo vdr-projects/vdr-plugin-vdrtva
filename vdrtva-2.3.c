@@ -1612,10 +1612,10 @@ int cMenuLinkItem::Compare(const cListObject &ListObject) const
 
 //	How many active timers are there for this series?
 
-int cMenuLinkItem::TimerCount(void) {
+int cMenuLinkItem::getTimers(cTvaLog *timerslist) {
   int count = 0;
   LOCK_TIMERS_READ;
-  if ((Timers->Count() == 0) || (!captureComplete)) return 99;
+  if ((Timers->Count() == 0) || (!captureComplete)) return 0;
   for (const cTimer *ti = Timers->First(); ti; ti = Timers->Next(ti)) {
     const cEvent *event = ti->Event();
     if (event && ti->HasFlags(tfActive) && (ti->WeekDays() == 0)) {
@@ -1625,7 +1625,12 @@ int cMenuLinkItem::TimerCount(void) {
       cEventCRID *eventcrid = EventCRIDs.GetByID(channel->Number(), event->EventID());
       if (eventcrid && chanda) {
 	cString scrid = cString::sprintf("%s%s", chanda->DA(),eventcrid->sCRID());
-	if (!strcmp(scrid, sCRID())) count++;
+	if (!strcmp(scrid, sCRID())) {
+	  if(timerslist) {
+	    timerslist->Append("    %s    %s\n", *DayDateTime(event->StartTime()), channel->Name());
+	  }
+	  count++;
+	}
       }
     }
   }
@@ -1682,7 +1687,7 @@ eOSState cMenuLinks::Delete(void)
   }
   int Index = Current();
   cMenuLinkItem *item = (cMenuLinkItem *)Get(Index);
-  int timercount = item->TimerCount();
+  int timercount = item->getTimers(NULL);
   cString prompt;
   if (timercount > 1) {
     prompt = cString::sprintf(tr("Delete series link & %d timers?"), timercount);
@@ -1719,8 +1724,16 @@ eOSState cMenuLinks::Info(void)
     eventcount++;
     icrids++;
   }
-  cString message = cString::sprintf("Series CRID:      %s\nTotal Events:    %d\nActive Timers:   %d", 
-				menuitem->sCRID(), eventcount, menuitem->TimerCount());
+  cTvaLog timerslist;	// Abuse our logging class for string-handling
+  cString message;
+  if (menuitem->getTimers(&timerslist)) {
+    message = cString::sprintf("Series CRID:      %s\nTotal Events:     %d\nActive Timers:\n\n%s",
+				menuitem->sCRID(), eventcount, timerslist.Buffer());
+  }
+  else {
+    message = cString::sprintf("Series CRID:      %s\nTotal Events:     %d\nNo Active Timers",
+                                menuitem->sCRID(), eventcount);
+  }
   if (linkitem->Title()) {
     return AddSubMenu(new cMenuText(linkitem->Title(), message, fontOsd));
   }
