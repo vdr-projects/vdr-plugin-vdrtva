@@ -104,3 +104,11 @@ VDR Plugin 'vdrtva' Revision History
 2015-10-08: Version 0.3.6
 - Update patch for VDR 2.3.1.
 - Update plugin for VDR 2.3.1 via separate source file and Makefile changes.
+
+2016-06-01: Version 0.3.7
+- Create links.data on first run, not when first series link is created.
+- VDR 2.3.x version: fix potential stall in CRID capture.
+- Use original event title for timers in report, not escaped version.
+- Change default series link lifetime to 91 days (NORDIG spec).
+- OSD: Display future timers for each series link.
+- Removed obsolete patch files.
