@@ -212,12 +212,9 @@ bool cPluginvdrTva::Start(void)
 void cPluginvdrTva::Stop(void)
 {
   // Stop any background activities the plugin is performing.
-  if (Filter) {
-    delete Filter;
-    Filter = NULL;
-  }
   tvalog.MailLog();
-  if(statusMonitor) delete statusMonitor;
+  StopDataCapture();
+  if (statusMonitor) delete statusMonitor;
   Links.Save();
 }
 
